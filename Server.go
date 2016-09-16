@@ -67,6 +67,9 @@ func handleClient(ws *websocket.Conn) {
 		ConRead:  con_read,
 	}
 
+	// Alert the Game Engine
+	con_read <- "get_gamestate:"
+
 	// Begin communication loop
 	go readClient(ws, con_read, con_id)
 	writeClient(ws, con_write, con_id)
