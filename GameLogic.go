@@ -2,23 +2,16 @@ package rush_n_crush
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
-)
-
-const (
-	T_EMPTY int8 = 1
-	T_SWALL int8 = 2
-	T_WWALL int8 = 3
-	T_SLOWV int8 = 4
-	T_SLOWH int8 = 5
-	T_WLOWV int8 = 6
-	T_WLOWH int8 = 7
-	T_WALK  int8 = 8
+	"time"
 )
 
 const (
@@ -29,37 +22,49 @@ type GameClient struct {
 	Id       int8
 	ConWrite chan string
 	ConRead  chan string
+	Nick     string
 }
 
-type Position struct {
-	x uint16
-	y uint16
+type UpdateGroup struct {
+	YourTurn      bool
+	TileUpdates   []Tile
+	PlayerUpdates []Player
 }
 
-type Player struct {
-	id      int8
-	owner   int8
-	pos     Position
-	moves   int8
-	updated int8
+func (u UpdateGroup) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBufferString("{\"your_turn\":")
+	if u.YourTurn {
+		buf.WriteString("true")
+	} else {
+		buf.WriteString("false")
+	}
+	buf.WriteString(",\"updated_tiles\":[")
+	for _, v := range u.TileUpdates {
+		tileJSON, _ := v.MarshalJSON()
+		buf.Write(tileJSON)
+		buf.WriteString(",")
+	}
+	buf.WriteString("],\"updated_players\":[")
+	for _, v := range u.PlayerUpdates {
+		playerJSON, _ := v.MarshalJSON()
+		buf.Write(playerJSON)
+		buf.WriteString(",")
+	}
+	buf.WriteString("]}")
+	return buf.Bytes(), nil
 }
 
-type Tile struct {
-	pos      Position
-	tType    int8
-	health   int16
-	nextType int8
-	updated  int8
-}
-
+// Game State Variables
 var Clients map[int8]GameClient
-var GameMap [][]Tile
-var update int8 = 0
+var ClientTurn int8 = -1
+var settings_playersPerClient int8 = 1
 
-// The syntax is command:json_object
+// The syntax is command:arg_string
 func processCommand(id int8, message string) error {
-	prev_update := update
-	update = update + 1
+	// preallocate the update group
+	var u UpdateGroup
+	u.TileUpdates = make([]Tile, 0, 16)
+	u.PlayerUpdates = make([]Player, 0, 2)
 
 	i := strings.Index(message, ":")
 	if i < 0 {
@@ -67,73 +72,68 @@ func processCommand(id int8, message string) error {
 	}
 
 	command := message[:i]
+
+	// Run Commands
 	switch command {
 	case "get_gamestate":
 		// They need to be sent the map
-
+		SendMap(id)
 		// After sending, add in players for them
+		AddPlayers(id, &u)
+	case "set_nick":
+		// Set this client's nickname
+		c := Clients[id]
+		c.Nick = cleanString(message[i+1:])
+		return nil
 	case "map":
-		// load a map
-		LoadMap(message[i+1:])
+		// if a game has not been started, load a map
+		if ClientTurn < 0 {
+			LoadMap(message[i+1:])
+		}
+	case "setting_players_per_client":
+		if id == -1 {
+			desired, _ := strconv.ParseInt(message[i+1:], 10, 8)
+			if desired > 0 {
+				settings_playersPerClient = int8(desired)
+			}
+		}
+	case "end_turn":
+		// Move to next Client
 	}
 	// check if we should update state (who's turn it is)
-	// send updates to all users
-	updateClients(prev_update)
-
-	return nil
-}
-
-func updateClients(prev_update int8) {
-	// updated items have prev_update+1 as their updated field
-	// if a player is upgraded, and it is the client's player check it against all objects, to see what it can see, and send those
-	// if it isn't the clients, check if the client can see it, and send it if they can
-	// Always send any map tile updates, regardless of position
-	// Send the update command
-}
-
-func LoadMap(map_args string) error {
-	maparr := strings.Split(map_args, ",")
-	var w, h uint16
-	var t int64
-	var err error
-	fmt.Printf("%s %s\n", maparr[0], maparr[1])
-
-	t, err = strconv.ParseInt(maparr[0], 10, 16)
-	if err != nil {
-		fmt.Printf("Got err %q\n", err)
-		return err
-	}
-	w = uint16(t)
-
-	t, err = strconv.ParseInt(maparr[1], 10, 16)
-	if err != nil {
-		fmt.Printf("Got err %q\n", err)
-		return err
-	}
-	h = uint16(t)
-
-	fmt.Printf("Loading map of size %dx%d\n", w, h)
-
-	// Allocate the map
-	GameMap = make([][]Tile, h)
-	for i := uint16(0); i < h; i++ {
-		row := make([]Tile, w)
-		for j := uint16(0); j < w; j++ {
-			t, err = strconv.ParseInt(maparr[(i*w)+j+2], 10, 8)
-			if err != nil {
-				fmt.Printf("Got err %q\n", err)
-				return err
-			}
-			var tile Tile
-			tile.pos = Position{j, i}
-			tile.tType = int8(t)
-			row[j] = tile
-			fmt.Printf("%d", t)
+	if len(Clients) >= 2 {
+		if ClientTurn < 0 {
+			ClientTurn = 0
 		}
-		fmt.Printf("\n")
-		GameMap[i] = row
+		// Check if the current client has used all their moves
 	}
+	// send updates to all users
+	updateClients(u)
+
 	return nil
+}
+
+func updateClients(u UpdateGroup) {
+	// When we enable view and ray tracing, we will only send what clients can see
+	// we will always send any map tile updates, to all
+	// we will check what upgraded players can see, and for the owner gets an update for all powerups in it's vision
+	// we will see if clients can see a different owners upgraded player
+	// Always send a YourTurn to who's turn it is, and "SoNSos_Turn" to everyone else
+	// but for now, we will send all changes to all players
+	// Always send a YourTurn to who's turn it is, and "SoNSos_Turn" to everyone else
+
+}
+
+func cleanString(ins string) string {
+	reg, err := regexp.Compile("[^A-Za-z0-9]+")
+	if err != nil {
+		fmt.Printf("Could not compile regexp :%q\n", err)
+		return ins
+	}
+
+	safe := reg.ReplaceAllString(ins, "-")
+	safe = strings.ToLower(strings.Trim(safe, "-"))
+	return safe
 }
 
 func GameLoop() {
@@ -154,8 +154,12 @@ func GameLoop() {
 }
 
 func StartGame() {
+	// seed our random
+	rand.Seed(time.Now().UnixNano())
 	// Make our client map
 	Clients = make(map[int8]GameClient)
+	// Make our map of players
+	GamePlayers = make([]Player, 0, 32)
 
 	// run default commands from file
 	// openfile
