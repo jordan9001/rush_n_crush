@@ -29,13 +29,13 @@ func readClient(ws *websocket.Conn, con_read chan string, con_id int8) {
 	}
 }
 
-func writeClient(ws *websocket.Conn, con_write chan string, con_id int8) {
+func writeClient(ws *websocket.Conn, con_write chan []byte, con_id int8) {
 	for {
 		// write if we have a message to write
 		select {
 		case to_write := <-con_write:
 			// We have a message to deliver, write it out
-			nw, ew := ws.Write([]byte(to_write))
+			nw, ew := ws.Write(to_write)
 			if ew != nil {
 				fmt.Printf("Client %d Write Errored\n")
 				return
@@ -57,7 +57,7 @@ func handleClient(ws *websocket.Conn) {
 	fmt.Printf("Got a new client: %d\n", con_id)
 
 	// Add channels for output and input to this connection
-	con_write := make(chan string)
+	con_write := make(chan []byte)
 	con_read := make(chan string)
 
 	// Add this connection to our connection map

@@ -119,5 +119,5 @@ func SendMap(id int8) {
 		fmt.Printf("Got err : %q\n", err)
 	}
 	// Send the map
-	Clients[id].ConWrite <- string(sendable)
+	Clients[id].ConWrite <- sendable
 }
