@@ -14,44 +14,58 @@ import (
 	"time"
 )
 
-const (
-	STARTUP_FILE string = "./run/startup.cmd"
-)
-
 type GameClient struct {
 	Id       int8
 	ConWrite chan []byte
-	ConRead  chan string
 	Nick     string
 }
 
+type Message struct {
+	Type string
+	Data []byte
+}
+
+func (m Message) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBufferString("{\"message_type\":\"")
+	buf.WriteString(m.Type)
+	buf.WriteString("\",\"data\":")
+	buf.Write(m.Data)
+	buf.WriteString("}")
+	return buf.Bytes(), nil
+}
+
 type UpdateGroup struct {
-	YourTurn      bool
-	ClientTurn    string
+	YourId        int8
+	ClientTurn    int8
 	TileUpdates   []Tile
 	PlayerUpdates []Player
 }
 
 func (u UpdateGroup) MarshalJSON() ([]byte, error) {
-	buf := bytes.NewBufferString("{\"your_turn\":")
-	if u.YourTurn {
-		buf.WriteString("true")
-	} else {
-		buf.WriteString("false")
-	}
+	var first bool
+	buf := bytes.NewBufferString("{\"your_id\":")
+	buf.WriteString(strconv.FormatInt(int64(u.YourId), 10))
 	buf.WriteString(",\"current_turn\":\"")
-	buf.WriteString(u.ClientTurn)
+	buf.WriteString(strconv.FormatInt(int64(u.ClientTurn), 10))
 	buf.WriteString("\",\"updated_tiles\":[")
+	first = true
 	for _, v := range u.TileUpdates {
+		if !first {
+			buf.WriteString(",")
+		}
 		tileJSON, _ := v.MarshalJSON()
 		buf.Write(tileJSON)
-		buf.WriteString(",")
+		first = false
 	}
 	buf.WriteString("],\"updated_players\":[")
+	first = true
 	for _, v := range u.PlayerUpdates {
+		if !first {
+			buf.WriteString(",")
+		}
 		playerJSON, _ := v.MarshalJSON()
 		buf.Write(playerJSON)
-		buf.WriteString(",")
+		first = false
 	}
 	buf.WriteString("]}")
 	return buf.Bytes(), nil
@@ -62,7 +76,7 @@ var Clients map[int8]GameClient
 var ClientTurn int8 = -1
 var settings_playersPerClient int8 = 1
 
-// The syntax is command:arg_string
+// The syntax is command:comma,separated,args
 func processCommand(id int8, message string) error {
 	var err error = nil
 	// preallocate the update group
@@ -79,17 +93,30 @@ func processCommand(id int8, message string) error {
 
 	// Run Commands
 	switch command {
-	case "get_gamestate":
+	case "get_gamestate": // no args
 		// They need to be sent the map
 		SendMap(id)
 		// After sending, add in players for them
 		AddPlayers(id, &u)
-	case "set_nick":
+	case "player_move": // args = player_id, newx, newy
+		err = MovePlayer(message[i+1:], id, &u)
+		if err != nil {
+			return err
+		}
+	case "player_dir": // arg = player_dir
+
+	case "set_nick": // arg = nick_string
 		// Set this client's nickname
 		c := Clients[id]
 		c.Nick = cleanString(message[i+1:])
+		// Send everyone a who's who
+		sendWhosWho(-1)
 		return nil
-	case "set_default_moves":
+	case "who_is_who":
+		// Send the requester a who's who
+		sendWhosWho(id)
+		return nil
+	case "set_default_moves": // arg = default numb
 		if id == -1 {
 			var desired int64
 			desired, err = strconv.ParseInt(message[i+1:], 10, 8)
@@ -101,12 +128,12 @@ func processCommand(id int8, message string) error {
 			}
 		}
 		return nil
-	case "map":
+	case "map": // args = width,height,tile_type,...
 		// if a game has not been started, load a map
 		if ClientTurn < 0 {
 			LoadMap(message[i+1:])
 		}
-	case "setting_players_per_client":
+	case "setting_players_per_client": // arg = player_per_client
 		if id == -1 {
 			var desired int64
 			desired, err = strconv.ParseInt(message[i+1:], 10, 8)
@@ -118,7 +145,7 @@ func processCommand(id int8, message string) error {
 			}
 		}
 		return nil
-	case "end_turn":
+	case "end_turn": // no arg
 		// Move to next Client
 		clearClientMoves(id, &u)
 	}
@@ -132,23 +159,15 @@ func processCommand(id int8, message string) error {
 func updateClients(u UpdateGroup) error {
 	// When we enable view and ray tracing, we will only send what clients can see
 	// we will always send any map tile updates, to all
-	// we will check what upgraded players can see, and for the owner gets an update for all powerups in it's vision
+	// we will check what upgraded players can see, and the owner gets an update for all objects and players in it's vision
 	// we will see if clients can see a different owners upgraded player
-	// Always send a YourTurn to who's turn it is, and "SoNSos_Turn" to everyone else
 	// but for now, we will send all changes to all players
-
-	// Always send a YourTurn to who's turn it is, and "SoNSos_Turn" to everyone else
-	for i, c := range Clients {
-		if i == ClientTurn {
-			u.YourTurn = true
-		} else {
-			u.YourTurn = false
-		}
+	for _, c := range Clients {
+		u.YourId = c.Id
 		// Send the data
-		json, err := u.MarshalJSON()
-		if err != nil {
-			return err
-		}
+		data, _ := u.MarshalJSON()
+		m := Message{"update", data}
+		json, _ := m.MarshalJSON()
 		c.ConWrite <- json
 	}
 	return nil
@@ -171,10 +190,29 @@ func updateTurn(u *UpdateGroup) {
 		giveClientMoves(ClientTurn, u)
 	}
 	// Update the current_turn in u
-	if len(Clients[ClientTurn].Nick) > 0 {
-		u.ClientTurn = Clients[ClientTurn].Nick
-	} else {
-		u.ClientTurn = strconv.FormatInt(int64(ClientTurn), 10)
+	u.ClientTurn = ClientTurn
+}
+
+func sendWhosWho(id int8) {
+	data := bytes.NewBufferString("{")
+	first := true
+	for _, v := range Clients {
+		if !first {
+			data.WriteString(",")
+		}
+		data.WriteRune('"')
+		data.WriteString(strconv.FormatInt(int64(v.Id), 10))
+		data.WriteString("\":\"")
+		data.WriteString(v.Nick)
+		first = false
+	}
+
+	// if id < 0, send it to everyone
+	sendable := data.Bytes()
+	for _, v := range Clients {
+		if id < 0 || v.Id == id {
+			v.ConWrite <- sendable
+		}
 	}
 }
 
@@ -193,51 +231,51 @@ func cleanString(ins string) string {
 func GameLoop() {
 	for {
 		// Read from our clients
-		for id, v := range Clients {
-			select {
-			case msg := <-v.ConRead:
-				err := processCommand(id, msg)
-				if err != nil {
-					fmt.Printf("Got a bad command %s\n", msg)
-					// Send error to the client who sent it
-					//TODO
-				}
-			default:
-				continue
-			}
+		msg := <-con_read
+		err := processCommand(msg.client, msg.message)
+		if err != nil {
+			fmt.Printf("Got error \"%v\" for command %s\n", err, msg.message)
+			// Send error to the client who sent it
+			//TODO
 		}
 	}
 }
 
-func StartGame() {
+func StartGame(startup_path string) (chan command, error) {
 	// seed our random
 	rand.Seed(time.Now().UnixNano())
 	// Make our client map
 	Clients = make(map[int8]GameClient)
+	// Make our read chan
+	c := make(chan command)
 	// Make our map of players
 	GamePlayers = make([]Player, 0, 32)
 
 	// run default commands from file
-	// openfile
-	f, err := os.Open(STARTUP_FILE)
-	if err != nil {
-		fmt.Printf("Could not open %q\n", STARTUP_FILE)
-	}
-	// run each command
-	fread := bufio.NewReader(f)
-
-	var cmdstr string
-	for {
-		cmdstr, err = fread.ReadString('\n')
-		if len(cmdstr) == 0 {
-			break
+	if len(startup_path) > 0 {
+		// openfile
+		f, err := os.Open(startup_path)
+		if err != nil {
+			fmt.Printf("Could not open %q\n", startup_path)
+			return nil, errors.New("Bad startup command file")
 		}
-		processCommand(-1, cmdstr[:len(cmdstr)-1])
+		// run each command
+		fread := bufio.NewReader(f)
 
-		if err == io.EOF {
-			break
+		var cmdstr string
+		for {
+			cmdstr, err = fread.ReadString('\n')
+			if len(cmdstr) == 0 {
+				break
+			}
+			processCommand(-1, cmdstr[:len(cmdstr)-1])
+
+			if err == io.EOF {
+				break
+			}
 		}
 	}
 
 	go GameLoop()
+	return c, nil
 }

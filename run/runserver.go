@@ -1,7 +1,11 @@
 package main
 
-import "github.com/jordan9001/rush_n_crush"
+import (
+	"github.com/jordan9001/rush_n_crush"
+	"net/http"
+)
 
 func main() {
-	rush_n_crush.StartServer("/", 12345)
+	go http.ListenAndServe(":8080", http.FileServer(http.Dir("/var/www/site")))
+	rush_n_crush.StartServer("/", ":12345", "./run/startup.cmd")
 }

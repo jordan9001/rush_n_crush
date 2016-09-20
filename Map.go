@@ -10,14 +10,15 @@ import (
 )
 
 const (
-	T_EMPTY int8 = 1
-	T_SWALL int8 = 2
-	T_WWALL int8 = 3
-	T_SLOWV int8 = 4
-	T_SLOWH int8 = 5
-	T_WLOWV int8 = 6
-	T_WLOWH int8 = 7
-	T_WALK  int8 = 8
+	T_EMPTY  int8 = 1
+	T_SWALL  int8 = 2
+	T_WWALL  int8 = 3
+	T_SLOWV  int8 = 4
+	T_SLOWH  int8 = 5
+	T_WLOWV  int8 = 6
+	T_WLOWH  int8 = 7
+	T_WALK   int8 = 8
+	T_BUTTON int8 = 9
 )
 
 type Position struct {
@@ -39,12 +40,13 @@ type Tile struct {
 	tType    int8
 	health   int16
 	nextType int8
+	occupied bool
 }
 
 func (t Tile) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBufferString("{\"pos\":")
-	posJSON, _ := t.pos.MarshalJSON()
-	buf.Write(posJSON)
+	pos, _ := t.pos.MarshalJSON()
+	buf.Write(pos)
 	buf.WriteString(",\"tType\":")
 	buf.WriteString(strconv.FormatInt(int64(t.tType), 10))
 	buf.WriteString(",\"health\":")
@@ -59,8 +61,8 @@ var GameMap [][]Tile
 
 func getRandomPosition() Position {
 	for i := 0; i < 100; i++ {
-		x := rand.Intn(len(GameMap[0]))
-		y := rand.Intn(len(GameMap))
+		x := rand.Intn(len(GameMap[0]) - 1)
+		y := rand.Intn(len(GameMap) - 1)
 		if GameMap[y][x].tType == T_WALK {
 			return Position{x: int16(x), y: int16(y)}
 		}
@@ -102,7 +104,6 @@ func LoadMap(map_args string) error {
 				return err
 			}
 			var tile Tile
-			tile.pos = Position{j, i}
 			tile.tType = int8(t)
 			row[j] = tile
 			fmt.Printf("%d", t)
@@ -114,10 +115,12 @@ func LoadMap(map_args string) error {
 }
 
 func SendMap(id int8) {
-	sendable, err := json.Marshal(GameMap)
+	data, err := json.Marshal(GameMap)
 	if err != nil {
 		fmt.Printf("Got err : %q\n", err)
 	}
-	// Send the map
+	// Send the map message
+	m := Message{"map", data}
+	sendable, _ := m.MarshalJSON()
 	Clients[id].ConWrite <- sendable
 }
