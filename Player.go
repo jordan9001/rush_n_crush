@@ -35,6 +35,7 @@ func (p Player) MarshalJSON() ([]byte, error) {
 var GamePlayers []Player
 var currentPlayerCount int8 = 0
 var movesPerPlayer int8 = 6
+var playersPerClient int8 = 2
 
 func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	var newx, newy int16
@@ -119,8 +120,8 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 }
 
 func AddPlayers(client int8, u *UpdateGroup) {
-	players := make([]Player, settings_playersPerClient)
-	for i := 0; i < int(settings_playersPerClient); i++ {
+	players := make([]Player, playersPerClient)
+	for i := 0; i < int(playersPerClient); i++ {
 		var p Player
 		p.id = currentPlayerCount
 		currentPlayerCount++
@@ -134,6 +135,16 @@ func AddPlayers(client int8, u *UpdateGroup) {
 	}
 	GamePlayers = append(GamePlayers, players...)
 	u.PlayerUpdates = append(u.PlayerUpdates, players...)
+}
+
+func getNumberPlayers(id int8) int8 {
+	var num int8
+	for i := 0; i < len(GamePlayers); i++ {
+		if GamePlayers[i].owner == id {
+			num++
+		}
+	}
+	return num
 }
 
 func getClientMoves(id int8) int {

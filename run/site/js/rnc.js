@@ -10,6 +10,7 @@ function RushNCrush(url, canvas_id) {
 	this.maph = 0;
 	this.focux = 0;
 	this.focuy = 0;
+	this.player_index = -1;
 	this.zoom = 1;
 
 	// users
@@ -18,7 +19,7 @@ function RushNCrush(url, canvas_id) {
 	
 	// game objects
 	this.players = [];
-	this.team_color = ["#ff0000","#00ff00", "#0000ff"];
+	this.team_color = ["#03c", "#c00", "#60c", "#093", "#0cc", "#fc0"]; // 6 starter color, we will randomly add more as needed (only multiples of 3)
 	this.objects = [];
 
 	this.ws = new WebSocket(url);
@@ -27,7 +28,61 @@ function RushNCrush(url, canvas_id) {
 		var msg = JSON.parse(evt.data);
 		that.handle_message(msg.message_type, msg.data);
 	};
+
+	// Set up interaction
+	this.canvas.addEventListener('wheel', function(evt){
+		that.zoom += evt.deltaY / 30;
+		if (that.zoom <= 1) {
+			that.zoom = 1;
+		}
+		that.draw();
+		return false; 
+	}, false);
+	this.canvas.addEventListener('mousedown', function(evt){
+		var rect = that.canvas.getBoundingClientRect();
+		var px = event.clientX - rect.left;
+		var py = event.clientY - rect.top;
+		coord = that.px2coord(px, py);
+		that.handle_click(coord[0], coord[1]);
+	});
+	this.canvas.addEventListener('mousemove', function(evt){
+		var rect = that.canvas.getBoundingClientRect();
+		var px = event.clientX - rect.left;
+		var py = event.clientY - rect.top;
+		coord = that.px2coord(px, py);
+		that.handle_point(coord[0], coord[1]);
+	});
+	document.addEventListener('keydown', function(evt) {
+		if (evt.keyCode == 65) {
+			that.move_player(-1,0);
+		} else if (evt.keyCode == 68) {
+			that.move_player(1,0);
+		} else if (evt.keyCode == 87) {
+			that.move_player(0,-1);
+		} else if (evt.keyCode == 83) {
+			that.move_player(0,1);
+		} else if (evt.keyCode == 32) {
+			// next player
+			that.next_player();
+		} else if (evt.keyCode == 13) {
+			console.log('Fire');
+		} else if (evt.keyCode == 37) {
+			console.log('Aim left');
+		} else if (evt.keyCode == 39) {
+			console.log('Aim right');
+		}
+	});
 }
+
+RushNCrush.prototype.handle_point = function(x, y) {
+	// aim, if it is your turn and you have a guy selected
+	this.draw();
+};
+
+
+RushNCrush.prototype.handle_click = function(x, y) {
+	// shoot if it is your turn and you have a guy selected
+};
 
 RushNCrush.prototype.handle_message = function(message_type, data) {
 	changed = false;
@@ -42,8 +97,38 @@ RushNCrush.prototype.handle_message = function(message_type, data) {
 	}
 };
 
+RushNCrush.prototype.move_player = function(dx, dy) {
+	if (this.player_index < 0) {
+		return;
+	}
+	i = this.player_index;
+	// check if we can move
+	if (this.users_turn != this.userid) {
+		return;
+	}
+	p = 0;
+	if (this.map[this.players[i].pos.y + dy][this.players[i].pos.x + dx].tType != 8) {
+		return;
+	}
+	// send the move
+	this.ws.send("player_move:"+ this.players[i].id +","+ (this.players[i].pos.x + dx) +","+ (this.players[i].pos.y + dy));
+};
+
+RushNCrush.prototype.next_player = function() {
+	for (var i=1; i<this.players.length; i++) {
+		if (this.players[(this.player_index + i) % this.players.length].owner == this.userid) {
+			this.player_index = (this.player_index + i) % this.players.length;
+			this.focux = this.players[this.player_index].pos.x;
+			this.focuy = this.players[this.player_index].pos.y;
+			this.draw();
+			return;
+		}
+	}
+};
+
 RushNCrush.prototype.update_game = function(data) {
-	this.userid = data.your_id
+	this.userid = data.your_id;
+	this.users_turn = data.current_turn;
 	var u_t = data.updated_tiles;
 	for (var i=0; i<u_t.length; i++) {
 		this.map[u_t.pos.y][u_t.pos.x] = u_t;
@@ -53,13 +138,23 @@ RushNCrush.prototype.update_game = function(data) {
 		found = false;
 		for (var j=0; j<this.players.length; j++) {
 			if (u_p[i].id == this.players[j].id) {
-				this.players[j] = u_p[i]
+				this.players[j] = u_p[i];
+				if (j == this.player_index) {
+					this.focux = u_p[i].pos.x;
+					this.focuy = u_p[i].pos.y;
+				}
 				found = true;
 				break;
 			}
 		}
 		if (!found) {
 			this.players.push(u_p[i]);
+			if (u_p[i].owner == this.userid) {
+				// focus on him
+				this.focux = u_p[i].pos.x;
+				this.focuy = u_p[i].pos.y;
+				this.player_index = this.players.length - 1;
+			}
 		}
 	}
 	return true;
@@ -94,6 +189,9 @@ RushNCrush.prototype.draw = function() {
 		}
 	}
 
+	// Draw the selector icon
+	this.draw_cursor(Math.floor(this.focux), Math.floor(this.focuy));
+
 	// Draw the players
 	for (var i=0; i<this.players.length; i++) {
 		this.draw_player(this.players[i]);
@@ -106,17 +204,45 @@ RushNCrush.prototype.coord2px = function(x, y) {
 	var px;
 	var py;
 	
-	px = ((x * this.zoom) - (this.focux * this.zoom)) + (this.canvas.width / 2);
-	py = ((y * this.zoom) - (this.focuy * this.zoom)) + (this.canvas.height / 2);
+	px = ((x * this.zoom) - ((this.focux + 0.5) * this.zoom)) + (this.canvas.width / 2);
+	py = ((y * this.zoom) - ((this.focuy + 0.5) * this.zoom)) + (this.canvas.height / 2);
 
-	return [px,py];
+	return [px, py];
+};
+
+RushNCrush.prototype.px2coord = function(px, py) {
+	var x;
+	var y;
+
+	x = ((px - (this.canvas.width / 2)) / this.zoom) + (this.focux + 0.5);
+	y = ((py - (this.canvas.height / 2)) / this.zoom) + (this.focuy + 0.5);
+
+	return [x,y];
 };
 
 RushNCrush.prototype.draw_player = function(player) {
 	var center = this.coord2px(player.pos.x + 0.5, player.pos.y + 0.5);
+	if (this.team_color[player.owner] == undefined) {
+		// add a random color
+		color = "";
+		for (var i=0; i<99; i++) {
+			color = "#" + (Math.floor(Math.random()*5)*3).toString(16) + (Math.floor(Math.random()*5)*3).toString(16) + (Math.floor(Math.random()*5)*3).toString(16);
+			repeat = false;
+			for (var j=0; j<this.team_color.length; j++) {
+				if (color == this.team_color[j]) {
+					repeat = true;
+					break;
+				}
+			}
+			if (!repeat) {
+				break;
+			}
+		}
+		this.team_color[player.owner] = color;
+	}
 	this.ctx.fillStyle = this.team_color[player.owner];
 	this.ctx.beginPath();
-	this.ctx.arc(center[0], center[1], this.zoom/2, 0, 2*Math.PI);
+	this.ctx.arc(center[0], center[1], this.zoom/2 - 0.5, 0, 2*Math.PI);
 	this.ctx.fill();
 }
 
@@ -143,11 +269,11 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 		// Strong horizontal cover
 		break;
 	case 6:
-		this.ctx.fillStyle = "#685954";
+		this.ctx.fillStyle = "#b39b82";
 		// Weak vertical cover
 		break;
 	case 7:
-		this.ctx.fillStyle = "#685954";
+		this.ctx.fillStyle = "#b39b82";
 		// Weak horizontal cover
 		break;
 	case 8:
@@ -160,7 +286,18 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	}
 	var topl = this.coord2px(x,y);
 	var w = this.zoom;
-	this.ctx.fillRect(topl[0], topl[1], w, w);
+	var pad = -0.5;
+	
+	this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
 };
+
+RushNCrush.prototype.draw_cursor = function(x, y) {
+	this.ctx.strokeStyle = "black";
+	this.ctx.lineWidth = this.zoom / 10;
+	var topl = this.coord2px(x,y);
+	var w = this.zoom;
+	var pad = 0;
+	this.ctx.strokeRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+}
 
 var game = new RushNCrush("ws://"+ document.domain +":12345/", "gamecanvas");

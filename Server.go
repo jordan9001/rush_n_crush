@@ -42,10 +42,10 @@ func writeClient(ws *websocket.Conn, con_write chan []byte, con_id int8) {
 		// We have a message to deliver, write it out
 		nw, ew := ws.Write(to_write)
 		if ew != nil {
-			fmt.Printf("Client %d Write Errored\n")
+			fmt.Printf("Client %d Write Errored\n", con_id)
 			return
 		} else if nw != len(to_write) {
-			fmt.Printf("Client %d Wrote Short\n")
+			fmt.Printf("Client %d Wrote Short\n", con_id)
 		}
 	}
 }

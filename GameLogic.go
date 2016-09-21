@@ -74,7 +74,6 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 // Game State Variables
 var Clients map[int8]GameClient
 var ClientTurn int8 = -1
-var settings_playersPerClient int8 = 1
 
 // The syntax is command:comma,separated,args
 func processCommand(id int8, message string) error {
@@ -98,6 +97,7 @@ func processCommand(id int8, message string) error {
 		SendMap(id)
 		// After sending, add in players for them
 		AddPlayers(id, &u)
+		u.PlayerUpdates = GamePlayers
 	case "player_move": // args = player_id, newx, newy
 		err = MovePlayer(message[i+1:], id, &u)
 		if err != nil {
@@ -133,7 +133,7 @@ func processCommand(id int8, message string) error {
 		if ClientTurn < 0 {
 			LoadMap(message[i+1:])
 		}
-	case "setting_players_per_client": // arg = player_per_client
+	case "set_players_per_client": // arg = player_per_client
 		if id == -1 {
 			var desired int64
 			desired, err = strconv.ParseInt(message[i+1:], 10, 8)
@@ -141,7 +141,7 @@ func processCommand(id int8, message string) error {
 				return err
 			}
 			if desired > 0 {
-				settings_playersPerClient = int8(desired)
+				playersPerClient = int8(desired)
 			}
 		}
 		return nil
@@ -175,13 +175,18 @@ func updateClients(u UpdateGroup) error {
 
 func updateTurn(u *UpdateGroup) {
 	changedTurn := false
-	if len(Clients) >= 2 {
+	if len(Clients) >= 2 && len(GamePlayers) > 0 {
 		if ClientTurn < 0 {
 			ClientTurn = 0
 			changedTurn = true
 		} else if getClientMoves(ClientTurn) <= 0 {
 			// The current client has used all their player's moves
-			ClientTurn = (ClientTurn + 1) % int8(len(Clients))
+			for {
+				ClientTurn = (ClientTurn + 1) % int8(len(Clients))
+				if getNumberPlayers(ClientTurn) > 0 {
+					break
+				}
+			}
 			changedTurn = true
 		}
 	}
