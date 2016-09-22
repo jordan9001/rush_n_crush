@@ -124,3 +124,49 @@ func SendMap(id int8) {
 	sendable, _ := m.MarshalJSON()
 	Clients[id].ConWrite <- sendable
 }
+
+func canSee(px, py, x, y int16) bool {
+	var dx, dirx, dy, diry int16
+	if x > px {
+		dx = x - px
+		dirx = 1
+	} else {
+		dx = px - x
+		dirx = -1
+	}
+	if y > py {
+		dy = y - py
+		diry = 1
+	} else {
+		dy = py - y
+		diry = -1
+	}
+
+	sx := px
+	sy := py
+	n := dx + dy
+	err := dx - dy
+	dx *= 2
+	dy *= 2
+
+	for ; n >= 0; n-- {
+		if sx < 0 || sx >= int16(len(GameMap[0])) || sy < 0 || sy >= int16(len(GameMap)) {
+			return false
+		}
+		tt := GameMap[sy][sx].tType
+		if tt == T_SWALL || tt == T_WWALL || tt == T_EMPTY {
+			return false
+		} else if sx == x && sy == y {
+			return true
+		}
+
+		if err > 0 {
+			sx = sx + dirx
+			err = err - dy
+		} else {
+			sy = sy + diry
+			err = err + dx
+		}
+	}
+	return false
+}

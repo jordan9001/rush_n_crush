@@ -76,9 +76,7 @@ function RushNCrush(url, canvas_id) {
 
 RushNCrush.prototype.handle_point = function(x, y) {
 	// aim, if it is your turn and you have a guy selected
-	this.draw();
 };
-
 
 RushNCrush.prototype.handle_click = function(x, y) {
 	// shoot if it is your turn and you have a guy selected
@@ -182,6 +180,13 @@ RushNCrush.prototype.draw = function() {
 	// Clear
 	this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	
+	// Mark things for Shadow
+	for (var i=0; i<this.players.length; i++) {
+		if (this.players[i].owner == this.userid) {
+			this.ray_cast_start(this.players[i].pos.x, this.players[i].pos.y);
+		}
+	}
+
 	// Draw the tiles
 	for (var x=0; x<this.mapw; x++) {
 		for (var y=0; y<this.maph; y++) {
@@ -196,6 +201,7 @@ RushNCrush.prototype.draw = function() {
 	for (var i=0; i<this.players.length; i++) {
 		this.draw_player(this.players[i]);
 	}
+
 };
 
 // Turns an x,y coordinate to the pixel coordinate at the top left of the box
@@ -221,6 +227,9 @@ RushNCrush.prototype.px2coord = function(px, py) {
 };
 
 RushNCrush.prototype.draw_player = function(player) {
+	if (player.pos.x < 0 || player.pos.y < 0) {
+		return;
+	}
 	var center = this.coord2px(player.pos.x + 0.5, player.pos.y + 0.5);
 	if (this.team_color[player.owner] == undefined) {
 		// add a random color
@@ -247,6 +256,7 @@ RushNCrush.prototype.draw_player = function(player) {
 }
 
 RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
+	no_draw = false;
 	switch (tile_obj.tType) {
 	case 1:
 		this.ctx.fillStyle = "#000000";
@@ -277,18 +287,29 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 		// Weak horizontal cover
 		break;
 	case 8:
-		return;
+		no_draw = true;
 		// Walkable tile
-		break;
 	case 9:
+		no_draw = true;
 		// Button
 		break;
 	}
+	
 	var topl = this.coord2px(x,y);
 	var w = this.zoom;
 	var pad = -0.5;
-	
-	this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+	if (no_draw == false) {
+		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+	}
+	if (!tile_obj.lit) {
+		this.ctx.fillStyle = "rgba(0,0,0,0.15)";
+		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+	}
+
+	// draw debug index
+	//this.ctx.fillStyle = "#000000";
+	//this.ctx.font="8px";
+	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
 
 RushNCrush.prototype.draw_cursor = function(x, y) {
@@ -299,5 +320,59 @@ RushNCrush.prototype.draw_cursor = function(x, y) {
 	var pad = 0;
 	this.ctx.strokeRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
 }
+
+
+RushNCrush.prototype.ray_cast_start = function(origin_x, origin_y) {
+	// clear all the tiles
+	for (var x=0; x<this.mapw; x++) {
+		for (var y=0; y<this.maph; y++) {
+			this.map[y][x].lit = false;
+		}
+	}
+	num_cast = 128;
+	for (var i=0; i<num_cast; i++) {
+		var sin = Math.sin(Math.PI * 2 * (i / num_cast));
+		var cos = Math.cos(Math.PI * 2 * (i / num_cast));
+		var ex = cos * 20;
+		var ey = sin * 20;
+		this.ray_cast(origin_x, origin_y, ex + origin_x, ey + origin_y);
+	}	
+}
+
+RushNCrush.prototype.ray_cast = function (px, py, ex, ey) {
+	var dirx, diry;
+	dirx = (ex - px > 0) ? -1 : 1;
+	diry = (ey - py > 0) ? -1 : 1;
+	var dx = Math.abs(ex - px);
+	var dy = Math.abs(ey - py);
+
+	var sx = px;
+	var sy = py;
+	var n = dx + dy;
+	var err = dx - dy;
+	dx *= 2;
+	dy *= 2;
+
+	for (; n >= 0; n--) {
+		if (sx < 0 || sx >= this.mapw || sy < 0 || sy >= this.maph) {
+			return;
+		}
+		this.map[sy][sx].lit = true;
+		tt = this.map[sy][sx].tType;
+		if (tt == 1 || tt == 2 || tt == 3) {
+			return;
+		}
+
+		if (err > 0) {
+			sx = sx + dirx;
+			err = err - dy;
+		} else {
+			sy = sy + diry;
+			err = err + dx;
+		}
+	}
+
+}
+
 
 var game = new RushNCrush("ws://"+ document.domain +":12345/", "gamecanvas");
