@@ -97,7 +97,7 @@ func processCommand(id int8, message string) error {
 		SendMap(id)
 		// After sending, add in players for them
 		AddPlayers(id, &u)
-	case "player_move": // args = player_id, newx, newy
+	case "player_move": // args = player_id, newx, newy, dir
 		err = MovePlayer(message[i+1:], id, &u)
 		if err != nil {
 			return err
@@ -147,6 +147,9 @@ func processCommand(id int8, message string) error {
 	case "end_turn": // no arg
 		// Move to next Client
 		clearClientMoves(id, &u)
+	case "DISCONNECTED":
+		// remove the players
+		// remove the client
 	}
 	// check if we should update state (who's turn it is)
 	updateTurn(&u)
@@ -224,7 +227,6 @@ func updateTurn(u *UpdateGroup) {
 			ClientTurn = 0
 			changedTurn = true
 		} else if getClientMoves(ClientTurn) <= 0 {
-			// The current client has used all their player's moves
 			for {
 				ClientTurn = (ClientTurn + 1) % int8(len(Clients))
 				if getNumberPlayers(ClientTurn) > 0 {

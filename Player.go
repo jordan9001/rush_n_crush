@@ -12,7 +12,7 @@ type Player struct {
 	owner        int8
 	pos          Position
 	moves        int8
-	direction    int16 // 0 is right, 180 or -180 are left
+	direction    int16 // 0 is right, 180 or -180 are left, 90 is down
 	defaultMoves int8
 }
 
@@ -38,12 +38,15 @@ var movesPerPlayer int8 = 127
 var playersPerClient int8 = 1
 
 func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
-	var newx, newy int16
+	var newx, newy, dir int16
 	var pid int8
 	var t int64
 	var err error
 
 	argarr := strings.Split(arg_string, ",")
+	if len(argarr) < 4 {
+		return errors.New("Not enough arguments to player_move")
+	}
 
 	t, err = strconv.ParseInt(argarr[0], 10, 8)
 	if err != nil {
@@ -62,6 +65,12 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 		return err
 	}
 	newy = int16(t)
+
+	t, err = strconv.ParseInt(argarr[3], 10, 16)
+	if err != nil {
+		return err
+	}
+	dir = int16(t)
 
 	// check if the address is valid for moving
 	if newx >= int16(len(GameMap[0])) || newx < 0 || newy >= int16(len(GameMap)) || newy < 0 {
@@ -99,8 +108,8 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	if ydist < 0 {
 		ydist = 0 - ydist
 	}
-	if ydist+xdist > 1 {
-		return errors.New("Tried to move by more than one")
+	if ydist+xdist != 1 {
+		return errors.New("Didn't move by one")
 	}
 
 	// Change occupied spot
@@ -110,6 +119,7 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	// Move
 	GamePlayers[p].pos.x = newx
 	GamePlayers[p].pos.y = newy
+	GamePlayers[p].direction = dir
 
 	// Take away a mov
 	GamePlayers[p].moves -= 1

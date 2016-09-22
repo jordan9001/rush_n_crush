@@ -22,6 +22,8 @@ function RushNCrush(url, canvas_id) {
 	this.team_color = ["#03c", "#c00", "#60c", "#093", "#0cc", "#fc0"]; // 6 starter color, we will randomly add more as needed (only multiples of 3)
 	this.objects = [];
 
+	this.anistep = 0;
+
 	this.ws = new WebSocket(url);
 	that = this;
 	this.ws.onmessage = function(evt) {
@@ -35,7 +37,7 @@ function RushNCrush(url, canvas_id) {
 		if (that.zoom <= 1) {
 			that.zoom = 1;
 		}
-		that.draw();
+		that.draw(true);
 		return false; 
 	}, false);
 	this.canvas.addEventListener('mousedown', function(evt){
@@ -76,6 +78,13 @@ function RushNCrush(url, canvas_id) {
 
 RushNCrush.prototype.handle_point = function(x, y) {
 	// aim, if it is your turn and you have a guy selected
+	if (this.users_turn == this.userid) {
+		px = this.players[this.player_index].pos.x;
+		py = this.players[this.player_index].pos.y;
+		ang = 180 * Math.atan2(y - py, x - px) / Math.PI;
+		this.players[this.player_index].dir = Math.floor(ang);
+		this.draw(false);
+	}
 };
 
 RushNCrush.prototype.handle_click = function(x, y) {
@@ -91,7 +100,7 @@ RushNCrush.prototype.handle_message = function(message_type, data) {
 	}
 
 	if (changed == true) {
-		this.draw();
+		this.draw(true);
 	}
 };
 
@@ -109,7 +118,7 @@ RushNCrush.prototype.move_player = function(dx, dy) {
 		return;
 	}
 	// send the move
-	this.ws.send("player_move:"+ this.players[i].id +","+ (this.players[i].pos.x + dx) +","+ (this.players[i].pos.y + dy));
+	this.ws.send("player_move:"+ this.players[i].id +","+ (this.players[i].pos.x + dx) +","+ (this.players[i].pos.y + dy) +","+ (this.players[i].dir));
 };
 
 RushNCrush.prototype.next_player = function() {
@@ -118,7 +127,7 @@ RushNCrush.prototype.next_player = function() {
 			this.player_index = (this.player_index + i) % this.players.length;
 			this.focux = this.players[this.player_index].pos.x;
 			this.focuy = this.players[this.player_index].pos.y;
-			this.draw();
+			this.draw(false);
 			return;
 		}
 	}
@@ -136,6 +145,10 @@ RushNCrush.prototype.update_game = function(data) {
 		found = false;
 		for (var j=0; j<this.players.length; j++) {
 			if (u_p[i].id == this.players[j].id) {
+				// if the player moved, animate it
+				if (this.players[j].pos.x != u_p[i].pos.x || this.players[j].pos.y != u_p[i].pos.y || this.players[j].dir != u_p[i].dir) {
+					this.animate_move(j, this.players[j].pos.x, this.players[j].pos.y, this.players[j].dir, u_p[i].pos.x, u_p[i].pos.y, u_p[i].dir);
+				}
 				this.players[j] = u_p[i];
 				if (j == this.player_index) {
 					this.focux = u_p[i].pos.x;
@@ -176,14 +189,46 @@ RushNCrush.prototype.build_map = function(maparr) {
 	return true;
 };
 
-RushNCrush.prototype.draw = function() {
+RushNCrush.prototype.animate_move = function(p_index, sx, sy, sdir, x, y, dir) {
+	steps = 6;
+	that = this;
+	ani = function() {
+		// change player location and dir
+		dx = (x - sx) * (that.anistep / steps);
+		dy = (y - sy) * (that.anistep / steps);
+		dd = (dir - sdir) * (that.anistep / steps);
+		that.players[p_index].pos.x = sx + dx;
+		that.players[p_index].pos.y = sy + dy;
+		that.players[p_index].dir = sdir + dd;
+
+		// change focus
+		if (p_index == that.player_index) {
+			that.focux = sx + dx;
+			that.focuy = sy + dy;
+		}
+		that.draw(false);
+		that.anistep = that.anistep + 1;
+
+		if (that.anistep > steps) {
+			that.anistep = 0;
+		} else {
+			// Call request animation frame recursively, if we can
+			window.requestAnimationFrame(ani);
+		}
+	}
+	window.requestAnimationFrame(ani);
+}
+
+RushNCrush.prototype.draw = function(cast) {
 	// Clear
 	this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-	
-	// Mark things for Shadow
-	for (var i=0; i<this.players.length; i++) {
-		if (this.players[i].owner == this.userid) {
-			this.ray_cast_start(this.players[i].pos.x, this.players[i].pos.y);
+
+	if (cast) {
+		// Mark things for Shadow
+		for (var i=0; i<this.players.length; i++) {
+			if (this.players[i].owner == this.userid) {
+				this.ray_cast_start(this.players[i].pos.x, this.players[i].pos.y);
+			}
 		}
 	}
 
@@ -193,9 +238,6 @@ RushNCrush.prototype.draw = function() {
 			this.draw_tile(this.map[y][x], x, y);
 		}
 	}
-
-	// Draw the selector icon
-	this.draw_cursor(Math.floor(this.focux), Math.floor(this.focuy));
 
 	// Draw the players
 	for (var i=0; i<this.players.length; i++) {
@@ -253,6 +295,16 @@ RushNCrush.prototype.draw_player = function(player) {
 	this.ctx.beginPath();
 	this.ctx.arc(center[0], center[1], this.zoom/2 - 0.5, 0, 2*Math.PI);
 	this.ctx.fill();
+	// draw direction piece
+	this.ctx.fillStyle = "#FFFFFF";
+	this.ctx.strokeStyle = "#000000";
+	this.ctx.lineWidth = this.zoom / 90;
+	this.ctx.beginPath();
+	this.ctx.moveTo(center[0], center[1]);
+	this.ctx.arc(center[0], center[1], this.zoom/2 - 0.5, (Math.PI * player.dir/180) - Math.PI/18, (Math.PI * player.dir/180) + Math.PI/18);
+	this.ctx.lineTo(center[0], center[1]);
+	this.ctx.fill();
+	this.ctx.stroke();
 }
 
 RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
@@ -311,16 +363,6 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	//this.ctx.font="8px";
 	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
-
-RushNCrush.prototype.draw_cursor = function(x, y) {
-	this.ctx.strokeStyle = "black";
-	this.ctx.lineWidth = this.zoom / 10;
-	var topl = this.coord2px(x,y);
-	var w = this.zoom;
-	var pad = 0;
-	this.ctx.strokeRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
-}
-
 
 RushNCrush.prototype.ray_cast_start = function(origin_x, origin_y) {
 	// clear all the tiles

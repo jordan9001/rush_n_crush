@@ -27,6 +27,10 @@ func readClient(ws *websocket.Conn, con_id int8) {
 		}
 		if er == io.EOF {
 			fmt.Printf("Client %d Disconnected\n", con_id)
+			// close write
+			Clients[con_id].ConWrite <- []byte("DISCONNECTED")
+			// send disconnect command
+			con_read <- command{con_id, "DISCONNECTED:"}
 			return
 		} else if er != nil {
 			fmt.Printf("Client %d Read Errored\n", con_id)
@@ -39,6 +43,10 @@ func writeClient(ws *websocket.Conn, con_write chan []byte, con_id int8) {
 	for {
 		// write if we have a message to write
 		to_write := <-con_write
+		// check for disconnect
+		if string(to_write) == "DISCONNECTED" {
+			return
+		}
 		// We have a message to deliver, write it out
 		nw, ew := ws.Write(to_write)
 		if ew != nil {
