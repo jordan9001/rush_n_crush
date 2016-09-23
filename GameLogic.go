@@ -39,6 +39,8 @@ type UpdateGroup struct {
 	ClientTurn    int8
 	TileUpdates   []Tile
 	PlayerUpdates map[int8]Player
+	Powerups      []Weapon
+	WeaponHits    []HitInfo
 }
 
 func (u UpdateGroup) MarshalJSON() ([]byte, error) {
@@ -97,12 +99,13 @@ func processCommand(id int8, message string) error {
 		// After sending, add in players for them
 		AddPlayers(id)
 	case "player_move": // args = player_id, newx, newy, dir
+		// moves player, and updates dir
 		err = MovePlayer(message[i+1:], id)
+		// checks if the player picked up a powerup
+
 		if err != nil {
 			return err
 		}
-	case "player_dir": // arg = player_dir
-
 	case "set_nick": // arg = nick_string
 		// Set this client's nickname
 		c := Clients[id]
@@ -126,7 +129,7 @@ func processCommand(id int8, message string) error {
 			}
 		}
 		return nil
-	case "map": // args = width,height,tile_type,...
+	case "map": // args = width,height,tile_typex0y0,title_typex1y0,...
 		// if a game has not been started, load a map
 		if ClientTurn < 0 {
 			LoadMap(message[i+1:])

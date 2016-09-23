@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -19,6 +20,12 @@ const (
 	T_WLOWH  int8 = 7
 	T_WALK   int8 = 8
 	T_BUTTON int8 = 9
+)
+const (
+	T_SWALL_H int16 = 100
+	T_WWALL_H int16 = 30
+	T_SLOW_H  int16 = 60
+	T_WLOW_H  int16 = 10
 )
 
 type Position struct {
@@ -70,6 +77,16 @@ func getRandomPosition() Position {
 	return Position{x: -1, y: -1}
 }
 
+func damageTile(x, y, damage int16, u *UpdateGroup) {
+	if GameMap[y][x].nextType != GameMap[y][x].tType {
+		GameMap[y][x].health -= damage
+		if GameMap[y][x].health <= 0 {
+			GameMap[y][x].tType = GameMap[y][x].nextType
+		}
+		u.TileUpdates = append(u.TileUpdates, GameMap[y][x])
+	}
+}
+
 func LoadMap(map_args string) error {
 	maparr := strings.Split(map_args, ",")
 	var w, h int16
@@ -105,6 +122,21 @@ func LoadMap(map_args string) error {
 			}
 			var tile Tile
 			tile.tType = int8(t)
+			tile.nextType = tile.tType
+			if tile.tType == T_SWALL {
+				tile.nextType = T_WALK
+				tile.health = T_SWALL_H
+			} else if tile.tType == T_WWALL {
+				tile.nextType = T_WALK
+				tile.health = T_WWALL_H
+			} else if tile.tType == T_SLOWV || tile.tType == T_SLOWH {
+				tile.nextType = T_WALK
+				tile.health = T_SLOW_H
+			} else if tile.tType == T_WLOWV || tile.tType == T_WLOWH {
+				tile.nextType = T_WALK
+				tile.health = T_WLOW_H
+			}
+			tile.occupied = false
 			row[j] = tile
 			fmt.Printf("%d", t)
 		}
@@ -125,7 +157,22 @@ func SendMap(id int8) {
 	Clients[id].ConWrite <- sendable
 }
 
-func canSee(px, py, x, y int16) bool {
+func traceDir(px, py, angle int16, chanceCoverBlock bool) (int16, int16) {
+	var rad_ang float64 = math.Pi * float64(angle) / 180
+	sin := math.Sin(rad_ang)
+	cos := math.Cos(rad_ang)
+	var length int16 = int16(len(GameMap) + len(GameMap[0]))
+	var ex int16 = int16(cos)*length + px
+	var ey int16 = int16(sin)*length + py
+	return trace(px, py, ex, ey, chanceCoverBlock)
+}
+
+const (
+	chance_m float64 = 3
+	chance_b float64 = 0.3
+)
+
+func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
 	var dx, dirx, dy, diry int16
 	if x > px {
 		dx = x - px
@@ -144,20 +191,31 @@ func canSee(px, py, x, y int16) bool {
 
 	sx := px
 	sy := py
-	n := dx + dy
 	err := dx - dy
 	dx *= 2
 	dy *= 2
 
-	for ; n >= 0; n-- {
+	for {
 		if sx < 0 || sx >= int16(len(GameMap[0])) || sy < 0 || sy >= int16(len(GameMap)) {
-			return false
+			break
 		}
-		tt := GameMap[sy][sx].tType
-		if tt == T_SWALL || tt == T_WWALL || tt == T_EMPTY {
-			return false
-		} else if sx == x && sy == y {
-			return true
+		tile := GameMap[sy][sx]
+		if sx == x && sy == y {
+			break
+		} else if tile.occupied {
+			break
+		} else if tile.tType == T_SWALL || tile.tType == T_WWALL || tile.tType == T_EMPTY {
+			break
+		} else if chanceCoverBlock {
+			if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
+				// we have a chance to hit here, depending on how close we are to the cover
+				dist2 := float64(((x - px) * (x - px)) + ((y - py) * (y - py)))
+				chancepass := (chance_m / dist2) + chance_b
+				randval := rand.Float64()
+				if randval > chancepass {
+					break
+				}
+			}
 		}
 
 		if err > 0 {
@@ -168,5 +226,5 @@ func canSee(px, py, x, y int16) bool {
 			err = err + dx
 		}
 	}
-	return false
+	return sx, sy
 }

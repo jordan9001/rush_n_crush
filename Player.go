@@ -11,9 +11,11 @@ type Player struct {
 	id           int8
 	owner        int8
 	pos          Position
+	health       int16
 	moves        int8
 	direction    int16 // 0 is right, 180 or -180 are left, 90 is down
 	defaultMoves int8
+	weapons      []Weapon
 }
 
 func (p Player) MarshalJSON() ([]byte, error) {
@@ -24,17 +26,30 @@ func (p Player) MarshalJSON() ([]byte, error) {
 	buf.WriteString(",\"pos\":")
 	posJSON, _ := p.pos.MarshalJSON()
 	buf.Write(posJSON)
+	buf.WriteString(",\"health\":")
+	buf.WriteString(strconv.FormatInt(int64(p.health), 10))
 	buf.WriteString(",\"moves\":")
 	buf.WriteString(strconv.FormatInt(int64(p.moves), 10))
 	buf.WriteString(",\"dir\":")
 	buf.WriteString(strconv.FormatInt(int64(p.direction), 10))
-	buf.WriteString("}")
+	buf.WriteString(",\"weapons\":[")
+	first := true
+	for _, v := range p.weapons {
+		if !first {
+			buf.WriteString(",")
+		}
+		weaponJSON, _ := v.MarshalJSON()
+		buf.Write(weaponJSON)
+		first = false
+	}
+	buf.WriteString("]}")
 	return buf.Bytes(), nil
 }
 
 var GamePlayers []Player
 var currentPlayerCount int8 = 0
 var movesPerPlayer int8 = 6
+var defaultPlayerHealth int16 = 100
 var playersPerClient int8 = 3
 
 func MovePlayer(arg_string string, id int8) error {
@@ -126,6 +141,18 @@ func MovePlayer(arg_string string, id int8) error {
 	return nil
 }
 
+func damagePlayer(x, y, damage int16, u *UpdateGroup) {
+	// find the player
+	for i := 0; i < len(GamePlayers); i++ {
+		if GamePlayers[i].pos.x == x && GamePlayers[i].pos.y == y {
+			GamePlayers[i].health -= damage
+			if GamePlayers[i].health <= 0 {
+				// remove player
+			}
+		}
+	}
+}
+
 func AddPlayers(client int8) {
 	for i := 0; i < int(playersPerClient); i++ {
 		var p Player
@@ -135,7 +162,21 @@ func AddPlayers(client int8) {
 		// TODO: Spawn locations
 		p.pos = getRandomPosition()
 		p.moves = 0
+		p.health = defaultPlayerHealth
 		p.defaultMoves = movesPerPlayer
+		// add default weapon
+		p.weapons = make([]Weapon, 1, 3)
+		w := Weapon{
+			name:             "pistol",
+			damage:           damageStraight,
+			playerDamageMult: 5,
+			tileDamageMult:   5,
+			damageType:       "bullet",
+			ammo:             -1,
+			movesCost:        1,
+			pos:              Position{x: -1, y: -1},
+		}
+		p.weapons[0] = w
 		GamePlayers = append(GamePlayers, p)
 		GameMap[p.pos.y][p.pos.x].occupied = true
 	}
@@ -153,7 +194,8 @@ func makePlayerUpdates(client int8) map[int8]Player {
 			// add everything it can see
 			for o := 0; o < len(GamePlayers); o++ {
 				if GamePlayers[o].owner != client {
-					if canSee(x, y, GamePlayers[o].pos.x, GamePlayers[o].pos.y) {
+					sx, sy := trace(x, y, GamePlayers[o].pos.x, GamePlayers[o].pos.y, false)
+					if sx == x && sy == y {
 						playerUpdates[GamePlayers[o].id] = GamePlayers[o]
 					}
 				}
