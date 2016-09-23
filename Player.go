@@ -15,7 +15,7 @@ type Player struct {
 	moves        int8
 	direction    int16 // 0 is right, 180 or -180 are left, 90 is down
 	defaultMoves int8
-	weapons      []Weapon
+	weapons      WeaponCache
 }
 
 func (p Player) MarshalJSON() ([]byte, error) {
@@ -52,7 +52,7 @@ var movesPerPlayer int8 = 6
 var defaultPlayerHealth int16 = 100
 var playersPerClient int8 = 3
 
-func MovePlayer(arg_string string, id int8) error {
+func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	var newx, newy, dir int16
 	var pid int8
 	var t int64
@@ -138,6 +138,27 @@ func MovePlayer(arg_string string, id int8) error {
 
 	// Take away a mov
 	GamePlayers[p].moves -= 1
+
+	// Check if there are powerups
+	got_powerups := false
+	for i := 0; i < len(GameMap[newy][newx].powerups); i++ {
+		GamePlayers[p].weapons.add(GameMap[newy][newx].powerups[i])
+		got_powerups = true
+	}
+	if got_powerups {
+		// remove the cache
+		GameMap[newy][newx].powerups = nil
+		// update the tile
+		u.TileUpdates = append(u.TileUpdates, GameMap[newy][newx])
+	}
+	return nil
+}
+
+func fire(message string, client int8, u *UpdateGroup) error {
+	// find the player
+	// check the owner, moves
+	// find the weapon
+	// fire it
 	return nil
 }
 
@@ -174,9 +195,8 @@ func AddPlayers(client int8) {
 			damageType:       "bullet",
 			ammo:             -1,
 			movesCost:        1,
-			pos:              Position{x: -1, y: -1},
 		}
-		p.weapons[0] = w
+		p.weapons.add(w)
 		GamePlayers = append(GamePlayers, p)
 		GameMap[p.pos.y][p.pos.x].occupied = true
 	}

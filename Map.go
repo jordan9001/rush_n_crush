@@ -48,6 +48,7 @@ type Tile struct {
 	health   int16
 	nextType int8
 	occupied bool
+	powerups WeaponCache
 }
 
 func (t Tile) MarshalJSON() ([]byte, error) {
@@ -60,7 +61,10 @@ func (t Tile) MarshalJSON() ([]byte, error) {
 	buf.WriteString(strconv.FormatInt(int64(t.health), 10))
 	buf.WriteString(",\"nextType\":")
 	buf.WriteString(strconv.FormatInt(int64(t.nextType), 10))
-	buf.WriteByte('}')
+	buf.WriteString(",\"powerups\":")
+	p, _ := t.powerups.MarshalJSON()
+	buf.Write(p)
+	buf.WriteString("}")
 	return buf.Bytes(), nil
 }
 

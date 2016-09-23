@@ -83,6 +83,7 @@ func processCommand(id int8, message string) error {
 	// preallocate the update group
 	var u UpdateGroup
 	u.TileUpdates = make([]Tile, 0, 16)
+	u.WeaponHits = make([]HitInfo, 0, 1)
 
 	i := strings.Index(message, ":")
 	if i < 0 {
@@ -100,9 +101,12 @@ func processCommand(id int8, message string) error {
 		AddPlayers(id)
 	case "player_move": // args = player_id, newx, newy, dir
 		// moves player, and updates dir
-		err = MovePlayer(message[i+1:], id)
-		// checks if the player picked up a powerup
-
+		err = MovePlayer(message[i+1:], id, &u)
+		if err != nil {
+			return err
+		}
+	case "fire": // args = player_id, weapon, dir
+		err = fire(message[i+1:], id, &u)
 		if err != nil {
 			return err
 		}
