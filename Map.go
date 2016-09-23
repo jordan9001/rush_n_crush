@@ -28,9 +28,9 @@ type Position struct {
 
 func (p Position) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBufferString("{\"x\":")
-	buf.WriteString(strconv.FormatUint(uint64(p.x), 10))
+	buf.WriteString(strconv.FormatInt(int64(p.x), 10))
 	buf.WriteString(",\"y\":")
-	buf.WriteString(strconv.FormatUint(uint64(p.y), 10))
+	buf.WriteString(strconv.FormatInt(int64(p.y), 10))
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
 }

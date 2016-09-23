@@ -34,8 +34,8 @@ func (p Player) MarshalJSON() ([]byte, error) {
 
 var GamePlayers []Player
 var currentPlayerCount int8 = 0
-var movesPerPlayer int8 = 127
-var playersPerClient int8 = 1
+var movesPerPlayer int8 = 5
+var playersPerClient int8 = 3
 
 func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	var newx, newy, dir int16
@@ -143,6 +143,28 @@ func AddPlayers(client int8, u *UpdateGroup) {
 		GamePlayers = append(GamePlayers, p)
 		GameMap[p.pos.y][p.pos.x].occupied = true
 	}
+}
+
+func makePlayerUpdates(client int8) map[int8]Player {
+	playerUpdates := make(map[int8]Player)
+	// for each of this clients players
+	for cp := 0; cp < len(GamePlayers); cp++ {
+		if GamePlayers[cp].owner == client {
+			// add it to the map
+			playerUpdates[GamePlayers[cp].id] = GamePlayers[cp]
+			x := GamePlayers[cp].pos.x
+			y := GamePlayers[cp].pos.y
+			// add everything it can see
+			for o := 0; o < len(GamePlayers); o++ {
+				if GamePlayers[o].owner != client {
+					if canSee(x, y, GamePlayers[o].pos.x, GamePlayers[o].pos.y) {
+						playerUpdates[GamePlayers[o].id] = GamePlayers[o]
+					}
+				}
+			}
+		}
+	}
+	return playerUpdates
 }
 
 func getNumberPlayers(id int8) int8 {

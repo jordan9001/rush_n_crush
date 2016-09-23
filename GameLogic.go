@@ -159,63 +159,43 @@ func processCommand(id int8, message string) error {
 }
 
 func updateClients(u UpdateGroup) error {
-	for i := 0; i < len(Clients); i++ {
-		// When we enable view and ray tracing, we will only send what clients can see
-		// we will always send any map tile updates, to all
+	for _, currentClient := range Clients {
 		client_u := UpdateGroup{
-			YourId:      Clients[int8(i)].Id,
-			ClientTurn:  u.ClientTurn,
+			YourId:      currentClient.Id,
+			ClientTurn:  ClientTurn,
 			TileUpdates: u.TileUpdates,
 		}
-		client_u.PlayerUpdates = make(map[int8]Player)
-		for j, _ := range u.PlayerUpdates {
-			if u.PlayerUpdates[j].owner == Clients[int8(i)].Id {
-				// Add this player
-				client_u.PlayerUpdates[u.PlayerUpdates[j].id] = u.PlayerUpdates[j]
-				// Add what this player can see
-				for k := 0; k < len(GamePlayers); k++ {
-					if GamePlayers[k].owner != Clients[int8(i)].Id {
-						if canSee(u.PlayerUpdates[j].pos.x, u.PlayerUpdates[j].pos.y, GamePlayers[k].pos.x, GamePlayers[k].pos.y) {
-							client_u.PlayerUpdates[GamePlayers[k].id] = GamePlayers[k]
-							break
-						} else {
-							// send -1 -1
-							hiddenplayer := Player{
-								id:    GamePlayers[k].id,
-								owner: GamePlayers[k].owner,
-								pos:   Position{x: -1, y: -1},
-							}
-							hiddenplayer.pos = Position{x: -1, y: -1}
-							client_u.PlayerUpdates[hiddenplayer.id] = hiddenplayer
-						}
-					}
-				}
+		gets_update := false
+		for _, jv := range u.PlayerUpdates {
+			if jv.owner == currentClient.Id {
+				// Their player changed, send them an update
+				gets_update = true
+				break
 			} else {
-				// we will see if clients can see a different owners upgraded player
-				found := false
+				// Not their player, but can they see it?
 				for k := 0; k < len(GamePlayers); k++ {
-					if GamePlayers[k].owner == Clients[int8(i)].Id && GamePlayers[k].id != u.PlayerUpdates[j].id {
-						if canSee(GamePlayers[k].pos.x, GamePlayers[k].pos.y, u.PlayerUpdates[j].pos.x, u.PlayerUpdates[j].pos.y) {
-							client_u.PlayerUpdates[u.PlayerUpdates[j].id] = u.PlayerUpdates[j]
-							found = true
+					if GamePlayers[k].owner == currentClient.Id {
+						if canSee(GamePlayers[k].pos.x, GamePlayers[k].pos.y, jv.pos.x, jv.pos.y) {
+							gets_update = true
 							break
 						}
 					}
 				}
-				if !found {
-					// send -1 -1
-					var hiddenplayer Player = u.PlayerUpdates[j]
-					hiddenplayer.pos = Position{x: -1, y: -1}
-					client_u.PlayerUpdates[hiddenplayer.id] = hiddenplayer
+				if gets_update {
+					break
 				}
 			}
 		}
-		fmt.Printf("%d sees %v\n", Clients[int8(i)].Id, client_u.PlayerUpdates)
+		if gets_update {
+			fmt.Printf("%d gets an update", currentClient.Id)
+			client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id)
+		}
 		// Send the data
+		fmt.Printf("%d sees %v\n", currentClient.Id, client_u.PlayerUpdates)
 		data, _ := client_u.MarshalJSON()
 		m := Message{"update", data}
 		json, _ := m.MarshalJSON()
-		Clients[int8(i)].ConWrite <- json
+		currentClient.ConWrite <- json
 	}
 	return nil
 }
@@ -240,8 +220,6 @@ func updateTurn(u *UpdateGroup) {
 		// Give the next client moves
 		giveClientMoves(ClientTurn, u)
 	}
-	// Update the current_turn in u
-	u.ClientTurn = ClientTurn
 }
 
 func sendWhosWho(id int8) {

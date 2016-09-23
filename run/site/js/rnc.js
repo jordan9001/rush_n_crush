@@ -22,12 +22,14 @@ function RushNCrush(url, canvas_id) {
 	this.team_color = ["#03c", "#c00", "#60c", "#093", "#0cc", "#fc0"]; // 6 starter color, we will randomly add more as needed (only multiples of 3)
 	this.objects = [];
 
-	this.anistep = 0;
+	this.animating = false;
+	this.player_ani_queue = [];
 
 	this.ws = new WebSocket(url);
 	that = this;
 	this.ws.onmessage = function(evt) {
 		var msg = JSON.parse(evt.data);
+		console.log(msg);
 		that.handle_message(msg.message_type, msg.data);
 	};
 
@@ -100,11 +102,19 @@ RushNCrush.prototype.handle_message = function(message_type, data) {
 	}
 
 	if (changed == true) {
-		this.draw(true);
+		// draw animations
+		// then draw everything
+		that = this;
+		this.run_animations(function() {
+			that.draw(true);
+		});
 	}
 };
 
 RushNCrush.prototype.move_player = function(dx, dy) {
+	if (this.animating) {
+		return;
+	}
 	if (this.player_index < 0) {
 		return;
 	}
@@ -141,31 +151,44 @@ RushNCrush.prototype.update_game = function(data) {
 		this.map[u_t.pos.y][u_t.pos.x] = u_t;
 	}
 	var u_p = data.updated_players;
-	for (var i=0; i<u_p.length; i++) {
-		found = false;
-		for (var j=0; j<this.players.length; j++) {
-			if (u_p[i].id == this.players[j].id) {
+	if (u_p.length == 0) {
+		return true;
+	}
+	// for every player, if updated, cool, if not, ditch 'em
+	for (var p=0; p<this.players.length; p++) {
+		p_updated = false;
+		for (var i=0; i<u_p.length; i++) {
+			if (u_p[i].id == this.players[p].id) {
 				// if the player moved, animate it
-				if (this.players[j].pos.x != u_p[i].pos.x || this.players[j].pos.y != u_p[i].pos.y || this.players[j].dir != u_p[i].dir) {
-					this.animate_move(j, this.players[j].pos.x, this.players[j].pos.y, this.players[j].dir, u_p[i].pos.x, u_p[i].pos.y, u_p[i].dir);
+				if (this.players[p].pos.x != u_p[i].pos.x || this.players[p].pos.y != u_p[i].pos.y) {
+					// queue for animation
+					this.player_animate(p, this.players[p].pos.x, this.players[p].pos.y, u_p[i].pos.x, u_p[i].pos.y);
 				}
-				this.players[j] = u_p[i];
-				if (j == this.player_index) {
+				// if we are focusing on this player already, keep the focus
+				if (p == this.player_index) {
 					this.focux = u_p[i].pos.x;
 					this.focuy = u_p[i].pos.y;
 				}
-				found = true;
+				// remove this from our updated array, and break
+				this.players[p] = u_p.splice(i,1)[0];
+				p_updated = true;
 				break;
 			}
 		}
-		if (!found) {
-			this.players.push(u_p[i]);
-			if (u_p[i].owner == this.userid) {
-				// focus on him
-				this.focux = u_p[i].pos.x;
-				this.focuy = u_p[i].pos.y;
-				this.player_index = this.players.length - 1;
-			}
+		if (!p_updated) {
+			// remove the player, and adjust
+			this.players.splice(p,1);
+			p--;
+		}
+	}
+	// if there are extras left over, add them
+	for (var i=0; i<u_p.length; i++) {
+		this.players.push(u_p[i]);
+		if (u_p[i].owner == this.userid) {
+			// focus on the new player
+			this.focux = u_p[i].pos.x;
+			this.focuy = u_p[i].pos.y;
+			this.player_index = this.players.length - 1;
 		}
 	}
 	return true;
@@ -189,34 +212,50 @@ RushNCrush.prototype.build_map = function(maparr) {
 	return true;
 };
 
-RushNCrush.prototype.animate_move = function(p_index, sx, sy, sdir, x, y, dir) {
-	steps = 6;
+RushNCrush.prototype.run_animations = function(callback) {
 	that = this;
-	ani = function() {
+	this.animating = true;
+	var animate = function(dt) {
+		if (that.player_ani_queue.length == 0) {
+			that.animating = false;
+			callback();
+			return;
+		}else if (that.player_ani_queue[0]() == false) {
+			that.player_ani_queue.shift();
+		}
+		that.draw(false);
+		window.requestAnimationFrame(animate);
+	}
+	animate();
+}
+
+RushNCrush.prototype.player_animate = function(p_index, sx,sy, x,y) {
+	steps = 9;
+	anistep = 1;
+	that = this;
+	update_player = function() {
 		// change player location and dir
-		dx = (x - sx) * (that.anistep / steps);
-		dy = (y - sy) * (that.anistep / steps);
-		dd = (dir - sdir) * (that.anistep / steps);
+		dx = (x - sx) * (anistep / steps);
+		dy = (y - sy) * (anistep / steps);
 		that.players[p_index].pos.x = sx + dx;
 		that.players[p_index].pos.y = sy + dy;
-		that.players[p_index].dir = sdir + dd;
 
 		// change focus
 		if (p_index == that.player_index) {
 			that.focux = sx + dx;
 			that.focuy = sy + dy;
 		}
-		that.draw(false);
-		that.anistep = that.anistep + 1;
+		anistep = anistep + 1;
 
-		if (that.anistep > steps) {
-			that.anistep = 0;
+		if (anistep > steps) {
+			anistep = 0;
+			return false
 		} else {
-			// Call request animation frame recursively, if we can
-			window.requestAnimationFrame(ani);
+			return true
 		}
 	}
-	window.requestAnimationFrame(ani);
+	// put this function into the queue
+	this.player_ani_queue.push(update_player);
 }
 
 RushNCrush.prototype.draw = function(cast) {
@@ -224,6 +263,7 @@ RushNCrush.prototype.draw = function(cast) {
 	this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
 	if (cast) {
+		this.ray_cast_clear();
 		// Mark things for Shadow
 		for (var i=0; i<this.players.length; i++) {
 			if (this.players[i].owner == this.userid) {
@@ -364,13 +404,16 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
 
-RushNCrush.prototype.ray_cast_start = function(origin_x, origin_y) {
+RushNCrush.prototype.ray_cast_clear = function() {
 	// clear all the tiles
 	for (var x=0; x<this.mapw; x++) {
 		for (var y=0; y<this.maph; y++) {
 			this.map[y][x].lit = false;
 		}
 	}
+}
+
+RushNCrush.prototype.ray_cast_start = function(origin_x, origin_y) {
 	num_cast = 128;
 	for (var i=0; i<num_cast; i++) {
 		var sin = Math.sin(Math.PI * 2 * (i / num_cast));
