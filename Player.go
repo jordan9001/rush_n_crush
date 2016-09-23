@@ -34,10 +34,10 @@ func (p Player) MarshalJSON() ([]byte, error) {
 
 var GamePlayers []Player
 var currentPlayerCount int8 = 0
-var movesPerPlayer int8 = 5
+var movesPerPlayer int8 = 6
 var playersPerClient int8 = 3
 
-func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
+func MovePlayer(arg_string string, id int8) error {
 	var newx, newy, dir int16
 	var pid int8
 	var t int64
@@ -123,13 +123,10 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 
 	// Take away a mov
 	GamePlayers[p].moves -= 1
-
-	// Add for updates
-	u.PlayerUpdates[GamePlayers[p].id] = GamePlayers[p]
 	return nil
 }
 
-func AddPlayers(client int8, u *UpdateGroup) {
+func AddPlayers(client int8) {
 	for i := 0; i < int(playersPerClient); i++ {
 		var p Player
 		p.id = currentPlayerCount
@@ -139,7 +136,6 @@ func AddPlayers(client int8, u *UpdateGroup) {
 		p.pos = getRandomPosition()
 		p.moves = 0
 		p.defaultMoves = movesPerPlayer
-		u.PlayerUpdates[p.id] = p
 		GamePlayers = append(GamePlayers, p)
 		GameMap[p.pos.y][p.pos.x].occupied = true
 	}
@@ -187,20 +183,18 @@ func getClientMoves(id int8) int {
 	return moves
 }
 
-func clearClientMoves(id int8, u *UpdateGroup) {
+func clearClientMoves(id int8) {
 	for i := 0; i < len(GamePlayers); i++ {
 		if GamePlayers[i].owner == id {
 			GamePlayers[i].moves = 0
-			u.PlayerUpdates[GamePlayers[i].id] = GamePlayers[i]
 		}
 	}
 }
 
-func giveClientMoves(id int8, u *UpdateGroup) {
+func giveClientMoves(id int8) {
 	for i := 0; i < len(GamePlayers); i++ {
 		if GamePlayers[i].owner == id {
 			GamePlayers[i].moves = GamePlayers[i].defaultMoves
-			u.PlayerUpdates[GamePlayers[i].id] = GamePlayers[i]
 		}
 	}
 }

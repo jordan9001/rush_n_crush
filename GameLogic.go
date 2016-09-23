@@ -81,7 +81,6 @@ func processCommand(id int8, message string) error {
 	// preallocate the update group
 	var u UpdateGroup
 	u.TileUpdates = make([]Tile, 0, 16)
-	u.PlayerUpdates = make(map[int8]Player)
 
 	i := strings.Index(message, ":")
 	if i < 0 {
@@ -96,9 +95,9 @@ func processCommand(id int8, message string) error {
 		// They need to be sent the map
 		SendMap(id)
 		// After sending, add in players for them
-		AddPlayers(id, &u)
+		AddPlayers(id)
 	case "player_move": // args = player_id, newx, newy, dir
-		err = MovePlayer(message[i+1:], id, &u)
+		err = MovePlayer(message[i+1:], id)
 		if err != nil {
 			return err
 		}
@@ -146,13 +145,13 @@ func processCommand(id int8, message string) error {
 		return nil
 	case "end_turn": // no arg
 		// Move to next Client
-		clearClientMoves(id, &u)
+		clearClientMoves(id)
 	case "DISCONNECTED":
 		// remove the players
 		// remove the client
 	}
 	// check if we should update state (who's turn it is)
-	updateTurn(&u)
+	updateTurn()
 	// send updates to all users
 	err = updateClients(u)
 	return err
@@ -165,31 +164,7 @@ func updateClients(u UpdateGroup) error {
 			ClientTurn:  ClientTurn,
 			TileUpdates: u.TileUpdates,
 		}
-		gets_update := false
-		for _, jv := range u.PlayerUpdates {
-			if jv.owner == currentClient.Id {
-				// Their player changed, send them an update
-				gets_update = true
-				break
-			} else {
-				// Not their player, but can they see it?
-				for k := 0; k < len(GamePlayers); k++ {
-					if GamePlayers[k].owner == currentClient.Id {
-						if canSee(GamePlayers[k].pos.x, GamePlayers[k].pos.y, jv.pos.x, jv.pos.y) {
-							gets_update = true
-							break
-						}
-					}
-				}
-				if gets_update {
-					break
-				}
-			}
-		}
-		if gets_update {
-			fmt.Printf("%d gets an update", currentClient.Id)
-			client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id)
-		}
+		client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id)
 		// Send the data
 		fmt.Printf("%d sees %v\n", currentClient.Id, client_u.PlayerUpdates)
 		data, _ := client_u.MarshalJSON()
@@ -200,7 +175,7 @@ func updateClients(u UpdateGroup) error {
 	return nil
 }
 
-func updateTurn(u *UpdateGroup) {
+func updateTurn() {
 	changedTurn := false
 	if len(Clients) >= 2 && len(GamePlayers) > 0 {
 		if ClientTurn < 0 {
@@ -218,7 +193,7 @@ func updateTurn(u *UpdateGroup) {
 	}
 	if changedTurn {
 		// Give the next client moves
-		giveClientMoves(ClientTurn, u)
+		giveClientMoves(ClientTurn)
 	}
 }
 

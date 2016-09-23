@@ -57,30 +57,25 @@ function RushNCrush(url, canvas_id) {
 		that.handle_point(coord[0], coord[1]);
 	});
 	document.addEventListener('keydown', function(evt) {
-		if (evt.keyCode == 65) {
+		if (evt.keyCode == 65 || evt.keyCode == 37) {
 			that.move_player(-1,0);
-		} else if (evt.keyCode == 68) {
+		} else if (evt.keyCode == 68 || evt.keyCode == 39) {
 			that.move_player(1,0);
-		} else if (evt.keyCode == 87) {
+		} else if (evt.keyCode == 87 || evt.keyCode == 38) {
 			that.move_player(0,-1);
-		} else if (evt.keyCode == 83) {
+		} else if (evt.keyCode == 83 || evt.keyCode == 40) {
 			that.move_player(0,1);
 		} else if (evt.keyCode == 32) {
-			// next player
 			that.next_player();
 		} else if (evt.keyCode == 13) {
-			console.log('Fire');
-		} else if (evt.keyCode == 37) {
-			console.log('Aim left');
-		} else if (evt.keyCode == 39) {
-			console.log('Aim right');
+			that.end_turn();
 		}
 	});
 }
 
 RushNCrush.prototype.handle_point = function(x, y) {
-	// aim, if it is your turn and you have a guy selected
-	if (this.users_turn == this.userid) {
+	// aim, if it is your turn and you have a guy selected, and he has turns
+	if (this.users_turn == this.userid && this.player_index >= 0) {
 		px = this.players[this.player_index].pos.x;
 		py = this.players[this.player_index].pos.y;
 		ang = 180 * Math.atan2(y - py, x - px) / Math.PI;
@@ -110,6 +105,10 @@ RushNCrush.prototype.handle_message = function(message_type, data) {
 		});
 	}
 };
+
+RushNCrush.prototype.end_turn = function() {
+	this.ws.send("end_turn:");
+}
 
 RushNCrush.prototype.move_player = function(dx, dy) {
 	if (this.animating) {
@@ -184,7 +183,7 @@ RushNCrush.prototype.update_game = function(data) {
 	// if there are extras left over, add them
 	for (var i=0; i<u_p.length; i++) {
 		this.players.push(u_p[i]);
-		if (u_p[i].owner == this.userid) {
+		if (u_p[i].owner == this.userid && this.player_index < 0) {
 			// focus on the new player
 			this.focux = u_p[i].pos.x;
 			this.focuy = u_p[i].pos.y;
@@ -258,6 +257,28 @@ RushNCrush.prototype.player_animate = function(p_index, sx,sy, x,y) {
 	this.player_ani_queue.push(update_player);
 }
 
+// Turns an x,y coordinate to the pixel coordinate at the top left of the box
+// returns a array with [px, py]
+RushNCrush.prototype.coord2px = function(x, y) {
+	var px;
+	var py;
+	
+	px = ((x * this.zoom) - ((this.focux + 0.5) * this.zoom)) + (this.canvas.width / 2);
+	py = ((y * this.zoom) - ((this.focuy + 0.5) * this.zoom)) + (this.canvas.height / 2);
+
+	return [px, py];
+};
+
+RushNCrush.prototype.px2coord = function(px, py) {
+	var x;
+	var y;
+
+	x = ((px - (this.canvas.width / 2)) / this.zoom) + (this.focux + 0.5);
+	y = ((py - (this.canvas.height / 2)) / this.zoom) + (this.focuy + 0.5);
+
+	return [x,y];
+};
+
 RushNCrush.prototype.draw = function(cast) {
 	// Clear
 	this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -284,28 +305,8 @@ RushNCrush.prototype.draw = function(cast) {
 		this.draw_player(this.players[i]);
 	}
 
-};
-
-// Turns an x,y coordinate to the pixel coordinate at the top left of the box
-// returns a array with [px, py]
-RushNCrush.prototype.coord2px = function(x, y) {
-	var px;
-	var py;
-	
-	px = ((x * this.zoom) - ((this.focux + 0.5) * this.zoom)) + (this.canvas.width / 2);
-	py = ((y * this.zoom) - ((this.focuy + 0.5) * this.zoom)) + (this.canvas.height / 2);
-
-	return [px, py];
-};
-
-RushNCrush.prototype.px2coord = function(px, py) {
-	var x;
-	var y;
-
-	x = ((px - (this.canvas.width / 2)) / this.zoom) + (this.focux + 0.5);
-	y = ((py - (this.canvas.height / 2)) / this.zoom) + (this.focuy + 0.5);
-
-	return [x,y];
+	// Draw the UI
+	this.draw_ui();
 };
 
 RushNCrush.prototype.draw_player = function(player) {
@@ -404,6 +405,25 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
 
+RushNCrush.prototype.draw_ui = function() {
+	// Draw current Turn
+	var box_size = 12;
+	var pad = 3;
+
+	this.ctx.fillStyle = this.team_color[this.users_turn];
+
+	var num_boxes = 1;
+	if (this.userid == this.users_turn && this.player_index >= 0) {
+		num_boxes = this.players[this.player_index].moves;
+	}
+	for (var i=0; i<num_boxes; i++) {
+		var x = pad;
+		var y = (i * (pad + box_size)) + pad;
+
+		this.ctx.fillRect(x,y, box_size,box_size);
+	}
+}
+
 RushNCrush.prototype.ray_cast_clear = function() {
 	// clear all the tiles
 	for (var x=0; x<this.mapw; x++) {
@@ -424,7 +444,7 @@ RushNCrush.prototype.ray_cast_start = function(origin_x, origin_y) {
 	}	
 }
 
-RushNCrush.prototype.ray_cast = function (px, py, ex, ey) {
+RushNCrush.prototype.ray_cast = function(px, py, ex, ey) {
 	var dirx, diry;
 	dirx = (ex - px > 0) ? -1 : 1;
 	diry = (ey - py > 0) ? -1 : 1;
@@ -458,6 +478,5 @@ RushNCrush.prototype.ray_cast = function (px, py, ex, ey) {
 	}
 
 }
-
 
 var game = new RushNCrush("ws://"+ document.domain +":12345/", "gamecanvas");
