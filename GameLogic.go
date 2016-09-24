@@ -195,7 +195,7 @@ func updateClients(u UpdateGroup) error {
 
 func updateTurn() {
 	changedTurn := false
-	if len(Clients) >= 2 && len(GamePlayers) > 0 {
+	if len(Clients) >= 3 && len(GamePlayers) > 0 {
 		if ClientTurn < 0 {
 			ClientTurn = 0
 			changedTurn = true

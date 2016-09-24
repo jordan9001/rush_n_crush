@@ -3,6 +3,7 @@ package rush_n_crush
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -197,10 +198,13 @@ func fire(message string, client int8, u *UpdateGroup) error {
 					}
 					// fire it
 					GamePlayers[p].weapons[w].damage(GamePlayers[p].pos.x, GamePlayers[p].pos.y, dir, GamePlayers[p].weapons[w], u)
+					fmt.Printf("Shot something!\n")
 					if GamePlayers[p].weapons[w].ammo > 0 {
 						GamePlayers[p].weapons[w].ammo -= 1
 					}
+					fmt.Printf("ammo--!\n")
 					GamePlayers[p].moves -= GamePlayers[p].weapons[w].movesCost
+					fmt.Printf("moves--!\n")
 					return nil
 				}
 			}

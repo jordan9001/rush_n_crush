@@ -4,8 +4,12 @@ Server Side:
 	Destruction
 	Chat (with origin player? Could be fun)
 	Handle disconnects
+	Handle mutiple clients
+	Handle connections during game
+	Have dead clients see all
 	Timeout turn
 
 Client Side:
-	Team Color Scale
+	Player Health
+	Max zoom level
 	all the server stuff

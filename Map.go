@@ -173,8 +173,8 @@ func traceDir(px, py, angle int16, chanceCoverBlock bool) (int16, int16) {
 }
 
 const (
-	chance_m float64 = 3
-	chance_b float64 = 0.3
+	CHANCE_M float64 = 6
+	CHANCE_B float64 = 0.6
 )
 
 func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
@@ -221,8 +221,9 @@ func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
 			if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
 				// we have a chance to hit here, depending on how close we are to the cover
 				dist2 := float64(((x - px) * (x - px)) + ((y - py) * (y - py)))
-				chancepass := (chance_m / dist2) + chance_b
+				chancepass := (CHANCE_M / dist2) + CHANCE_B
 				randval := rand.Float64()
+				fmt.Printf("Chance pass: %f, rand %f", chancepass, randval)
 				if randval > chancepass {
 					fmt.Printf(": Cover\n")
 					break
