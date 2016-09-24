@@ -126,6 +126,7 @@ func LoadMap(map_args string) error {
 			}
 			var tile Tile
 			tile.tType = int8(t)
+			tile.pos = Position{x: j, y: i}
 			tile.nextType = tile.tType
 			if tile.tType == T_SWALL {
 				tile.nextType = T_WALK
@@ -166,8 +167,8 @@ func traceDir(px, py, angle int16, chanceCoverBlock bool) (int16, int16) {
 	sin := math.Sin(rad_ang)
 	cos := math.Cos(rad_ang)
 	var length int16 = int16(len(GameMap) + len(GameMap[0]))
-	var ex int16 = int16(cos)*length + px
-	var ey int16 = int16(sin)*length + py
+	var ex int16 = int16(cos*float64(length)) + px
+	var ey int16 = int16(sin*float64(length)) + py
 	return trace(px, py, ex, ey, chanceCoverBlock)
 }
 
@@ -177,6 +178,7 @@ const (
 )
 
 func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
+	fmt.Printf("Trace from %d,%d to %d,%d: ", px, py, x, y)
 	var dx, dirx, dy, diry int16
 	if x > px {
 		dx = x - px
@@ -200,15 +202,20 @@ func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
 	dy *= 2
 
 	for {
+		fmt.Printf("%d,%d ", sx, sy)
 		if sx < 0 || sx >= int16(len(GameMap[0])) || sy < 0 || sy >= int16(len(GameMap)) {
+			fmt.Printf(": Out of Bounds\n")
 			break
 		}
 		tile := GameMap[sy][sx]
 		if sx == x && sy == y {
+			fmt.Printf(": Reached Target\n")
 			break
-		} else if tile.occupied {
+		} else if tile.occupied && !(sx == px && sy == py) {
+			fmt.Printf(": Occupied\n")
 			break
 		} else if tile.tType == T_SWALL || tile.tType == T_WWALL || tile.tType == T_EMPTY {
+			fmt.Printf(": Wall\n")
 			break
 		} else if chanceCoverBlock {
 			if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
@@ -217,6 +224,7 @@ func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
 				chancepass := (chance_m / dist2) + chance_b
 				randval := rand.Float64()
 				if randval > chancepass {
+					fmt.Printf(": Cover\n")
 					break
 				}
 			}

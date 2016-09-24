@@ -2,6 +2,8 @@ package rush_n_crush
 
 import (
 	"bytes"
+	"fmt"
+	"math/rand"
 	"strconv"
 )
 
@@ -12,7 +14,7 @@ type Weapon struct {
 	tileDamageMult   int16
 	damageType       string
 	ammo             int16
-	movesCost        int16
+	movesCost        int8
 }
 
 func (w Weapon) MarshalJSON() ([]byte, error) {
@@ -28,15 +30,15 @@ func (w Weapon) MarshalJSON() ([]byte, error) {
 
 type WeaponCache []Weapon
 
-func (wc WeaponCache) add(w Weapon) {
+func (wc WeaponCache) add(w Weapon) WeaponCache {
 	// check first if there is one already
 	for i := 0; i < len(wc); i++ {
 		if wc[i].name == w.name {
 			wc[i].ammo += w.ammo
-			return
+			return wc
 		}
 	}
-	wc = append(wc, w)
+	return append(wc, w)
 }
 
 func (wc WeaponCache) MarshalJSON() ([]byte, error) {
@@ -62,9 +64,10 @@ type HitInfo struct {
 func (h HitInfo) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBufferString("{\"damage_type\":\"")
 	buf.WriteString(h.damageType)
-	buf.WriteString(",\"pos\":")
+	buf.WriteString("\",\"pos\":")
 	pos, _ := h.pos.MarshalJSON()
 	buf.Write(pos)
+	buf.WriteString("}")
 	return buf.Bytes(), nil
 }
 
@@ -73,12 +76,15 @@ var GameWeapons []Weapon
 // damage functions
 // should only be called if the weapon has enough ammo, and the player has enough moves
 func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup) bool {
+	// Add some random to the shots
+	rand_max := 24
+	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 	// ray trace till we hit something
 	hx, hy := traceDir(start_x, start_y, direction, true)
+	fmt.Printf("Shot %d,%d\n", hx, hy)
 	// Update for animation
 	u.WeaponHits = append(u.WeaponHits, HitInfo{damageType: w.damageType, pos: Position{x: hx, y: hy}})
 	var baseDamage int16 = 1
-	// if it was occupied, hit the player
 	// else hit the tile
 	if GameMap[hy][hx].occupied == true {
 		damagePlayer(hx, hy, baseDamage*w.playerDamageMult, u)

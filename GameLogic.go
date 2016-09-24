@@ -39,7 +39,6 @@ type UpdateGroup struct {
 	ClientTurn    int8
 	TileUpdates   []Tile
 	PlayerUpdates map[int8]Player
-	Powerups      []Weapon
 	WeaponHits    []HitInfo
 }
 
@@ -69,6 +68,16 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 		buf.Write(playerJSON)
 		first = false
 	}
+	buf.WriteString("],\"hit_tiles\":[")
+	first = true
+	for _, v := range u.WeaponHits {
+		if !first {
+			buf.WriteString(",")
+		}
+		HitJSON, _ := v.MarshalJSON()
+		buf.Write(HitJSON)
+		first = false
+	}
 	buf.WriteString("]}")
 	return buf.Bytes(), nil
 }
@@ -76,6 +85,7 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 // Game State Variables
 var Clients map[int8]GameClient
 var ClientTurn int8 = -1
+var turnNumber int = 0
 
 // The syntax is command:comma,separated,args
 func processCommand(id int8, message string) error {
@@ -170,11 +180,12 @@ func updateClients(u UpdateGroup) error {
 			YourId:      currentClient.Id,
 			ClientTurn:  ClientTurn,
 			TileUpdates: u.TileUpdates,
+			WeaponHits:  u.WeaponHits,
 		}
 		client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id)
 		// Send the data
-		fmt.Printf("%d sees %v\n", currentClient.Id, client_u.PlayerUpdates)
 		data, _ := client_u.MarshalJSON()
+		fmt.Printf("%d sees %q\n", currentClient.Id, data)
 		m := Message{"update", data}
 		json, _ := m.MarshalJSON()
 		currentClient.ConWrite <- json
@@ -199,6 +210,7 @@ func updateTurn() {
 		}
 	}
 	if changedTurn {
+		turnNumber = turnNumber + 1
 		// Give the next client moves
 		giveClientMoves(ClientTurn)
 	}

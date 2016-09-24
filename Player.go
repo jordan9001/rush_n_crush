@@ -48,7 +48,7 @@ func (p Player) MarshalJSON() ([]byte, error) {
 
 var GamePlayers []Player
 var currentPlayerCount int8 = 0
-var movesPerPlayer int8 = 6
+var movesPerPlayer int8 = 12
 var defaultPlayerHealth int16 = 100
 var playersPerClient int8 = 3
 
@@ -142,7 +142,7 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	// Check if there are powerups
 	got_powerups := false
 	for i := 0; i < len(GameMap[newy][newx].powerups); i++ {
-		GamePlayers[p].weapons.add(GameMap[newy][newx].powerups[i])
+		GamePlayers[p].weapons = GamePlayers[p].weapons.add(GameMap[newy][newx].powerups[i])
 		got_powerups = true
 	}
 	if got_powerups {
@@ -155,11 +155,58 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 }
 
 func fire(message string, client int8, u *UpdateGroup) error {
+	var pid int8
+	var weaponArg string
+	var dir int16
+
+	argarr := strings.Split(message, ",")
+	if len(argarr) < 3 {
+		return errors.New("Not enough arguments to fire")
+	}
+
+	t, err := strconv.ParseInt(argarr[0], 10, 8)
+	if err != nil {
+		return err
+	}
+	pid = int8(t)
+
+	weaponArg = argarr[1]
+
+	t, err = strconv.ParseInt(argarr[2], 10, 16)
+	if err != nil {
+		return err
+	}
+	dir = int16(t)
+
 	// find the player
-	// check the owner, moves
-	// find the weapon
-	// fire it
-	return nil
+	for p := 0; p < len(GamePlayers); p++ {
+		if pid == GamePlayers[p].id {
+			if GamePlayers[p].owner != client {
+				return errors.New("Someone tried to move a player that is not theirs")
+			}
+			// move the players dir
+			GamePlayers[p].direction = dir
+			// find the weapon
+			for w := 0; w < len(GamePlayers[p].weapons); w++ {
+				// check the, moves
+				if GamePlayers[p].weapons[w].name == weaponArg {
+					if GamePlayers[p].moves < GamePlayers[p].weapons[w].movesCost {
+						return errors.New("Player doesn't have enough moves to fire this weapon")
+					} else if GamePlayers[p].weapons[w].ammo == 0 {
+						return errors.New("Out of Ammo")
+					}
+					// fire it
+					GamePlayers[p].weapons[w].damage(GamePlayers[p].pos.x, GamePlayers[p].pos.y, dir, GamePlayers[p].weapons[w], u)
+					if GamePlayers[p].weapons[w].ammo > 0 {
+						GamePlayers[p].weapons[w].ammo -= 1
+					}
+					GamePlayers[p].moves -= GamePlayers[p].weapons[w].movesCost
+					return nil
+				}
+			}
+		}
+	}
+	return errors.New("Couldn't find the player/weapon combo")
 }
 
 func damagePlayer(x, y, damage int16, u *UpdateGroup) {
@@ -169,6 +216,9 @@ func damagePlayer(x, y, damage int16, u *UpdateGroup) {
 			GamePlayers[i].health -= damage
 			if GamePlayers[i].health <= 0 {
 				// remove player
+				GameMap[GamePlayers[i].pos.y][GamePlayers[i].pos.x].occupied = false
+				GamePlayers = append(GamePlayers[:i], GamePlayers[i+1:]...)
+
 			}
 		}
 	}
@@ -186,17 +236,17 @@ func AddPlayers(client int8) {
 		p.health = defaultPlayerHealth
 		p.defaultMoves = movesPerPlayer
 		// add default weapon
-		p.weapons = make([]Weapon, 1, 3)
+		p.weapons = make([]Weapon, 0, 3)
 		w := Weapon{
 			name:             "pistol",
 			damage:           damageStraight,
-			playerDamageMult: 5,
-			tileDamageMult:   5,
+			playerDamageMult: 25,
+			tileDamageMult:   30,
 			damageType:       "bullet",
 			ammo:             -1,
-			movesCost:        1,
+			movesCost:        4,
 		}
-		p.weapons.add(w)
+		p.weapons = p.weapons.add(w)
 		GamePlayers = append(GamePlayers, p)
 		GameMap[p.pos.y][p.pos.x].occupied = true
 	}
@@ -215,7 +265,7 @@ func makePlayerUpdates(client int8) map[int8]Player {
 			for o := 0; o < len(GamePlayers); o++ {
 				if GamePlayers[o].owner != client {
 					sx, sy := trace(x, y, GamePlayers[o].pos.x, GamePlayers[o].pos.y, false)
-					if sx == x && sy == y {
+					if sx == GamePlayers[o].pos.x && sy == GamePlayers[o].pos.y {
 						playerUpdates[GamePlayers[o].id] = GamePlayers[o]
 					}
 				}
@@ -256,7 +306,11 @@ func clearClientMoves(id int8) {
 func giveClientMoves(id int8) {
 	for i := 0; i < len(GamePlayers); i++ {
 		if GamePlayers[i].owner == id {
-			GamePlayers[i].moves = GamePlayers[i].defaultMoves
+			if turnNumber <= 1 {
+				GamePlayers[i].moves = GamePlayers[i].defaultMoves / 2
+			} else {
+				GamePlayers[i].moves = GamePlayers[i].defaultMoves
+			}
 		}
 	}
 }

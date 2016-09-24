@@ -15,7 +15,7 @@ function RushNCrush(url, canvas_id) {
 
 	// users
 	this.userid = undefined;
-	this.users_turn = undefined;
+	this.user_turn = undefined;
 	
 	// game objects
 	this.players = [];
@@ -40,14 +40,11 @@ function RushNCrush(url, canvas_id) {
 			that.zoom = 1;
 		}
 		that.draw(true);
+		evt.returnValue = false;
 		return false; 
 	}, false);
 	this.canvas.addEventListener('mousedown', function(evt){
-		var rect = that.canvas.getBoundingClientRect();
-		var px = event.clientX - rect.left;
-		var py = event.clientY - rect.top;
-		coord = that.px2coord(px, py);
-		that.handle_click(coord[0], coord[1]);
+		that.handle_click();
 	});
 	this.canvas.addEventListener('mousemove', function(evt){
 		var rect = that.canvas.getBoundingClientRect();
@@ -70,22 +67,27 @@ function RushNCrush(url, canvas_id) {
 		} else if (evt.keyCode == 13) {
 			that.end_turn();
 		}
+		evt.returnValue = false;
+		return false
 	});
 }
 
 RushNCrush.prototype.handle_point = function(x, y) {
 	// aim, if it is your turn and you have a guy selected, and he has turns
-	if (this.users_turn == this.userid && this.player_index >= 0) {
-		px = this.players[this.player_index].pos.x;
-		py = this.players[this.player_index].pos.y;
+	if (this.user_turn != undefined && this.user_turn == this.userid && this.player_index >= 0) {
+		px = this.players[this.player_index].pos.x + 0.5;
+		py = this.players[this.player_index].pos.y + 0.5;
 		ang = 180 * Math.atan2(y - py, x - px) / Math.PI;
 		this.players[this.player_index].dir = Math.floor(ang);
 		this.draw(false);
 	}
 };
 
-RushNCrush.prototype.handle_click = function(x, y) {
+RushNCrush.prototype.handle_click = function() {
 	// shoot if it is your turn and you have a guy selected
+	if (this.user_turn == this.userid && this.player_index >= 0) {
+		this.ws.send("fire:"+ this.players[this.player_index].id +","+ this.players[this.player_index].weapons[0].name +","+ this.players[this.player_index].dir);
+	}	
 };
 
 RushNCrush.prototype.handle_message = function(message_type, data) {
@@ -119,7 +121,7 @@ RushNCrush.prototype.move_player = function(dx, dy) {
 	}
 	i = this.player_index;
 	// check if we can move
-	if (this.users_turn != this.userid) {
+	if (this.user_turn != this.userid) {
 		return;
 	}
 	p = 0;
@@ -144,10 +146,10 @@ RushNCrush.prototype.next_player = function() {
 
 RushNCrush.prototype.update_game = function(data) {
 	this.userid = data.your_id;
-	this.users_turn = data.current_turn;
+	this.user_turn = data.current_turn;
 	var u_t = data.updated_tiles;
 	for (var i=0; i<u_t.length; i++) {
-		this.map[u_t.pos.y][u_t.pos.x] = u_t;
+		this.map[u_t[i].pos.y][u_t[i].pos.x] = u_t[i];
 	}
 	var u_p = data.updated_players;
 	if (u_p.length == 0) {
@@ -177,6 +179,18 @@ RushNCrush.prototype.update_game = function(data) {
 		if (!p_updated) {
 			// remove the player, and adjust
 			this.players.splice(p,1);
+			// if this player is your focus, reset
+			if (p == this.player_index) {
+				this.player_index = -1;
+				for (var np=0; np < this.players.length; np++) {
+					if (this.players[np].owner == this.userid) {
+						this.focux = this.players[np].pos.x;
+						this.focuy = this.players[np].pos.y;
+						this.player_index = np;
+						break;
+					}
+				}
+			}
 			p--;
 		}
 	}
@@ -189,6 +203,11 @@ RushNCrush.prototype.update_game = function(data) {
 			this.focuy = u_p[i].pos.y;
 			this.player_index = this.players.length - 1;
 		}
+	}
+	// handle hit tiles
+	var h_t = data.hit_tiles;
+	for (var i=0; i<h_t.length; i++) {
+		this.hit_animate(h_t[i].pos.x, h_t[i].pos.y, h_t[i].damage_type);
 	}
 	return true;
 };
@@ -215,6 +234,7 @@ RushNCrush.prototype.run_animations = function(callback) {
 	that = this;
 	this.animating = true;
 	var animate = function(dt) {
+		that.draw(false);
 		if (that.player_ani_queue.length == 0) {
 			that.animating = false;
 			callback();
@@ -222,17 +242,40 @@ RushNCrush.prototype.run_animations = function(callback) {
 		}else if (that.player_ani_queue[0]() == false) {
 			that.player_ani_queue.shift();
 		}
-		that.draw(false);
 		window.requestAnimationFrame(animate);
 	}
 	animate();
 }
 
+RushNCrush.prototype.hit_animate = function(hitx, hity, type) {
+	var steps = 45;
+	var anistep = 1;
+	var that = this;
+	var topl = this.coord2px(hitx,hity);
+	var w = this.zoom;
+	var draw_hit = function() {
+		if (anistep >= steps) {
+			return false;
+		}
+		var fade = 1.0 / anistep;
+		var pad = -0.5 + (w * (anistep / (steps * 2)));
+		that.ctx.fillStyle = "rgba(200,0,0,"+ fade +")";
+		that.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+		anistep++;
+		return true;
+	}
+	this.player_ani_queue.push(draw_hit);
+}
+
 RushNCrush.prototype.player_animate = function(p_index, sx,sy, x,y) {
-	steps = 9;
-	anistep = 1;
-	that = this;
-	update_player = function() {
+	var steps = 18;
+	var anistep = 1;
+	var that = this;
+	var update_player = function() {
+		if (that.players[p_index] === undefined) {
+			console.log("Lost one during animation")
+			return false
+		}
 		// change player location and dir
 		dx = (x - sx) * (anistep / steps);
 		dy = (y - sy) * (anistep / steps);
@@ -280,6 +323,12 @@ RushNCrush.prototype.px2coord = function(px, py) {
 };
 
 RushNCrush.prototype.draw = function(cast) {
+	// if the canvas size is wrong, set it
+	
+	if (cast && (this.ctx.canvas.width != window.innerWidth || this.ctx.canvas.height != window.innerHeight)) {
+		this.ctx.canvas.width  = window.innerWidth;
+		this.ctx.canvas.height = window.innerHeight;
+	}
 	// Clear
 	this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -410,10 +459,10 @@ RushNCrush.prototype.draw_ui = function() {
 	var box_size = 12;
 	var pad = 3;
 
-	this.ctx.fillStyle = this.team_color[this.users_turn];
+	this.ctx.fillStyle = this.team_color[this.user_turn];
 
 	var num_boxes = 1;
-	if (this.userid == this.users_turn && this.player_index >= 0) {
+	if (this.userid == this.user_turn && this.player_index >= 0) {
 		num_boxes = this.players[this.player_index].moves;
 	}
 	for (var i=0; i<num_boxes; i++) {
