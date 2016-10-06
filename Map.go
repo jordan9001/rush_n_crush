@@ -68,35 +68,32 @@ func (t Tile) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-var GameMap [][]Tile
-
-func getRandomPosition() Position {
+func getRandomPosition(gv *GameVariables) Position {
 	for i := 0; i < 100; i++ {
-		x := rand.Intn(len(GameMap[0]) - 1)
-		y := rand.Intn(len(GameMap) - 1)
-		if GameMap[y][x].tType == T_WALK {
+		x := rand.Intn(len(gv.GameMap[0]) - 1)
+		y := rand.Intn(len(gv.GameMap) - 1)
+		if gv.GameMap[y][x].tType == T_WALK {
 			return Position{x: int16(x), y: int16(y)}
 		}
 	}
 	return Position{x: -1, y: -1}
 }
 
-func damageTile(x, y, damage int16, u *UpdateGroup) {
-	if GameMap[y][x].nextType != GameMap[y][x].tType {
-		GameMap[y][x].health -= damage
-		if GameMap[y][x].health <= 0 {
-			GameMap[y][x].tType = GameMap[y][x].nextType
+func damageTile(x, y, damage int16, u *UpdateGroup, gv *GameVariables) {
+	if gv.GameMap[y][x].nextType != gv.GameMap[y][x].tType {
+		gv.GameMap[y][x].health -= damage
+		if gv.GameMap[y][x].health <= 0 {
+			gv.GameMap[y][x].tType = gv.GameMap[y][x].nextType
 		}
-		u.TileUpdates = append(u.TileUpdates, GameMap[y][x])
+		u.TileUpdates = append(u.TileUpdates, gv.GameMap[y][x])
 	}
 }
 
-func LoadMap(map_args string) error {
+func LoadMap(map_args string, gv *GameVariables) error {
 	maparr := strings.Split(map_args, ",")
 	var w, h int16
 	var t int64
 	var err error
-	fmt.Printf("%s %s\n", maparr[0], maparr[1])
 
 	t, err = strconv.ParseInt(maparr[0], 10, 16)
 	if err != nil {
@@ -115,7 +112,7 @@ func LoadMap(map_args string) error {
 	fmt.Printf("Loading map of size %dx%d\n", w, h)
 
 	// Allocate the map
-	GameMap = make([][]Tile, h)
+	gv.GameMap = make([][]Tile, h)
 	for i := int16(0); i < h; i++ {
 		row := make([]Tile, w)
 		for j := int16(0); j < w; j++ {
@@ -146,13 +143,13 @@ func LoadMap(map_args string) error {
 			fmt.Printf("%d", t)
 		}
 		fmt.Printf("\n")
-		GameMap[i] = row
+		gv.GameMap[i] = row
 	}
 	return nil
 }
 
-func SendMap(id int8) {
-	data, err := json.Marshal(GameMap)
+func SendMap(id int, gv *GameVariables) {
+	data, err := json.Marshal(gv.GameMap)
 	if err != nil {
 		fmt.Printf("Got err : %q\n", err)
 	}
@@ -162,23 +159,24 @@ func SendMap(id int8) {
 	Clients[id].ConWrite <- sendable
 }
 
-func traceDir(px, py, angle int16, chanceCoverBlock bool) (int16, int16) {
+func traceDir(px, py, angle int16, chanceCoverBlock bool, gv *GameVariables) (int16, int16) {
 	var rad_ang float64 = math.Pi * float64(angle) / 180
 	sin := math.Sin(rad_ang)
 	cos := math.Cos(rad_ang)
-	var length int16 = int16(len(GameMap) + len(GameMap[0]))
+	var length int16 = int16(len(gv.GameMap) + len(gv.GameMap[0]))
 	var ex int16 = int16(cos*float64(length)) + px
 	var ey int16 = int16(sin*float64(length)) + py
-	return trace(px, py, ex, ey, chanceCoverBlock)
+	return trace(px, py, ex, ey, chanceCoverBlock, gv)
 }
 
+// Chance to hit cover
 const (
 	CHANCE_M float64 = 6
 	CHANCE_B float64 = 0.6
 )
 
-func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
-	fmt.Printf("Trace from %d,%d to %d,%d: ", px, py, x, y)
+func trace(px, py, x, y int16, chanceCoverBlock bool, gv *GameVariables) (int16, int16) {
+	// fmt.Printf("Trace from %d,%d to %d,%d: ", px, py, x, y)
 	var dx, dirx, dy, diry int16
 	if x > px {
 		dx = x - px
@@ -202,20 +200,15 @@ func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
 	dy *= 2
 
 	for {
-		fmt.Printf("%d,%d ", sx, sy)
-		if sx < 0 || sx >= int16(len(GameMap[0])) || sy < 0 || sy >= int16(len(GameMap)) {
-			fmt.Printf(": Out of Bounds\n")
+		if sx < 0 || sx >= int16(len(gv.GameMap[0])) || sy < 0 || sy >= int16(len(gv.GameMap)) {
 			break
 		}
-		tile := GameMap[sy][sx]
+		tile := gv.GameMap[sy][sx]
 		if sx == x && sy == y {
-			fmt.Printf(": Reached Target\n")
 			break
 		} else if tile.occupied && !(sx == px && sy == py) {
-			fmt.Printf(": Occupied\n")
 			break
 		} else if tile.tType == T_SWALL || tile.tType == T_WWALL || tile.tType == T_EMPTY {
-			fmt.Printf(": Wall\n")
 			break
 		} else if chanceCoverBlock {
 			if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
@@ -223,9 +216,7 @@ func trace(px, py, x, y int16, chanceCoverBlock bool) (int16, int16) {
 				dist2 := float64(((x - px) * (x - px)) + ((y - py) * (y - py)))
 				chancepass := (CHANCE_M / dist2) + CHANCE_B
 				randval := rand.Float64()
-				fmt.Printf("Chance pass: %f, rand %f", chancepass, randval)
 				if randval > chancepass {
-					fmt.Printf(": Cover\n")
 					break
 				}
 			}

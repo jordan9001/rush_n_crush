@@ -10,7 +10,7 @@ import (
 
 type Player struct {
 	id           int8
-	owner        int8
+	owner        int
 	pos          Position
 	health       int16
 	moves        int8
@@ -47,13 +47,7 @@ func (p Player) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-var GamePlayers []Player
-var currentPlayerCount int8 = 0
-var movesPerPlayer int8 = 12
-var defaultPlayerHealth int16 = 100
-var playersPerClient int8 = 3
-
-func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
+func MovePlayer(arg_string string, id int, u *UpdateGroup, gv *GameVariables) error {
 	var newx, newy, dir int16
 	var pid int8
 	var t int64
@@ -89,18 +83,18 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	dir = int16(t)
 
 	// check if the address is valid for moving
-	if newx >= int16(len(GameMap[0])) || newx < 0 || newy >= int16(len(GameMap)) || newy < 0 {
+	if newx >= int16(len(gv.GameMap[0])) || newx < 0 || newy >= int16(len(gv.GameMap)) || newy < 0 {
 		return errors.New("Out of Bounds")
 	}
-	if GameMap[newy][newx].tType != T_WALK || GameMap[newy][newx].occupied {
+	if gv.GameMap[newy][newx].tType != T_WALK || gv.GameMap[newy][newx].occupied {
 		return errors.New("Unmovable Tile")
 	}
 
 	var p int
 	var found bool
-	for i := 0; i < len(GamePlayers); i++ {
-		if GamePlayers[i].id == pid {
-			if GamePlayers[i].owner != id {
+	for i := 0; i < len(gv.GamePlayers); i++ {
+		if gv.GamePlayers[i].id == pid {
+			if gv.GamePlayers[i].owner != id {
 				return errors.New("Tried to move another user's player")
 			}
 			p = i
@@ -111,16 +105,16 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 		return errors.New("Unknown Player")
 	}
 
-	if GamePlayers[p].moves <= 0 {
+	if gv.GamePlayers[p].moves <= 0 {
 		return errors.New("Player out of Moves")
 	}
 
 	// check if the player tried to move by more than one space
-	xdist := GamePlayers[p].pos.x - newx
+	xdist := gv.GamePlayers[p].pos.x - newx
 	if xdist < 0 {
 		xdist = 0 - xdist
 	}
-	ydist := GamePlayers[p].pos.y - newy
+	ydist := gv.GamePlayers[p].pos.y - newy
 	if ydist < 0 {
 		ydist = 0 - ydist
 	}
@@ -129,33 +123,33 @@ func MovePlayer(arg_string string, id int8, u *UpdateGroup) error {
 	}
 
 	// Change occupied spot
-	GameMap[GamePlayers[p].pos.y][GamePlayers[p].pos.x].occupied = false
-	GameMap[newy][newx].occupied = true
+	gv.GameMap[gv.GamePlayers[p].pos.y][gv.GamePlayers[p].pos.x].occupied = false
+	gv.GameMap[newy][newx].occupied = true
 
 	// Move
-	GamePlayers[p].pos.x = newx
-	GamePlayers[p].pos.y = newy
-	GamePlayers[p].direction = dir
+	gv.GamePlayers[p].pos.x = newx
+	gv.GamePlayers[p].pos.y = newy
+	gv.GamePlayers[p].direction = dir
 
 	// Take away a mov
-	GamePlayers[p].moves -= 1
+	gv.GamePlayers[p].moves -= 1
 
 	// Check if there are powerups
 	got_powerups := false
-	for i := 0; i < len(GameMap[newy][newx].powerups); i++ {
-		GamePlayers[p].weapons = GamePlayers[p].weapons.add(GameMap[newy][newx].powerups[i])
+	for i := 0; i < len(gv.GameMap[newy][newx].powerups); i++ {
+		gv.GamePlayers[p].weapons = gv.GamePlayers[p].weapons.add(gv.GameMap[newy][newx].powerups[i])
 		got_powerups = true
 	}
 	if got_powerups {
 		// remove the cache
-		GameMap[newy][newx].powerups = nil
+		gv.GameMap[newy][newx].powerups = nil
 		// update the tile
-		u.TileUpdates = append(u.TileUpdates, GameMap[newy][newx])
+		u.TileUpdates = append(u.TileUpdates, gv.GameMap[newy][newx])
 	}
 	return nil
 }
 
-func fire(message string, client int8, u *UpdateGroup) error {
+func fire(message string, client int, u *UpdateGroup, gv *GameVariables) error {
 	var pid int8
 	var weaponArg string
 	var dir int16
@@ -180,30 +174,36 @@ func fire(message string, client int8, u *UpdateGroup) error {
 	dir = int16(t)
 
 	// find the player
-	for p := 0; p < len(GamePlayers); p++ {
-		if pid == GamePlayers[p].id {
-			if GamePlayers[p].owner != client {
+	for p := 0; p < len(gv.GamePlayers); p++ {
+		if pid == gv.GamePlayers[p].id {
+			if gv.GamePlayers[p].owner != client {
 				return errors.New("Someone tried to move a player that is not theirs")
 			}
 			// move the players dir
-			GamePlayers[p].direction = dir
+			gv.GamePlayers[p].direction = dir
 			// find the weapon
-			for w := 0; w < len(GamePlayers[p].weapons); w++ {
+			for w := 0; w < len(gv.GamePlayers[p].weapons); w++ {
 				// check the, moves
-				if GamePlayers[p].weapons[w].name == weaponArg {
-					if GamePlayers[p].moves < GamePlayers[p].weapons[w].movesCost {
+				if gv.GamePlayers[p].weapons[w].name == weaponArg {
+					if gv.GamePlayers[p].moves < gv.GamePlayers[p].weapons[w].movesCost {
 						return errors.New("Player doesn't have enough moves to fire this weapon")
-					} else if GamePlayers[p].weapons[w].ammo == 0 {
+					} else if gv.GamePlayers[p].weapons[w].ammo == 0 {
 						return errors.New("Out of Ammo")
 					}
 					// fire it
-					GamePlayers[p].weapons[w].damage(GamePlayers[p].pos.x, GamePlayers[p].pos.y, dir, GamePlayers[p].weapons[w], u)
+					gv.GamePlayers[p].weapons[w].damage(gv.GamePlayers[p].pos.x, gv.GamePlayers[p].pos.y, dir, gv.GamePlayers[p].weapons[w], u, gv)
 					fmt.Printf("Shot something!\n")
-					if GamePlayers[p].weapons[w].ammo > 0 {
-						GamePlayers[p].weapons[w].ammo -= 1
+					// a Player may have died, we need to get p again
+					for newp := 0; newp < len(gv.GamePlayers); p++ {
+						if pid == gv.GamePlayers[newp].id {
+							p = newp
+						}
+					}
+					if gv.GamePlayers[p].weapons[w].ammo > 0 {
+						gv.GamePlayers[p].weapons[w].ammo -= 1
 					}
 					fmt.Printf("ammo--!\n")
-					GamePlayers[p].moves -= GamePlayers[p].weapons[w].movesCost
+					gv.GamePlayers[p].moves -= gv.GamePlayers[p].weapons[w].movesCost
 					fmt.Printf("moves--!\n")
 					return nil
 				}
@@ -213,32 +213,32 @@ func fire(message string, client int8, u *UpdateGroup) error {
 	return errors.New("Couldn't find the player/weapon combo")
 }
 
-func damagePlayer(x, y, damage int16, u *UpdateGroup) {
+func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) {
 	// find the player
-	for i := 0; i < len(GamePlayers); i++ {
-		if GamePlayers[i].pos.x == x && GamePlayers[i].pos.y == y {
-			GamePlayers[i].health -= damage
-			if GamePlayers[i].health <= 0 {
+	for i := 0; i < len(gv.GamePlayers); i++ {
+		if gv.GamePlayers[i].pos.x == x && gv.GamePlayers[i].pos.y == y {
+			gv.GamePlayers[i].health -= damage
+			if gv.GamePlayers[i].health <= 0 {
 				// remove player
-				GameMap[GamePlayers[i].pos.y][GamePlayers[i].pos.x].occupied = false
-				GamePlayers = append(GamePlayers[:i], GamePlayers[i+1:]...)
+				gv.GameMap[gv.GamePlayers[i].pos.y][gv.GamePlayers[i].pos.x].occupied = false
+				gv.GamePlayers = append(gv.GamePlayers[:i], gv.GamePlayers[i+1:]...)
 
 			}
 		}
 	}
 }
 
-func AddPlayers(client int8) {
-	for i := 0; i < int(playersPerClient); i++ {
+func AddPlayers(client int, gv *GameVariables) {
+	for i := 0; i < int(gv.playersPerClient); i++ {
 		var p Player
-		p.id = currentPlayerCount
-		currentPlayerCount++
+		p.id = gv.currentPlayerCount
+		gv.currentPlayerCount++
 		p.owner = client
 		// TODO: Spawn locations
-		p.pos = getRandomPosition()
+		p.pos = getRandomPosition(gv)
 		p.moves = 0
-		p.health = defaultPlayerHealth
-		p.defaultMoves = movesPerPlayer
+		p.health = gv.defaultPlayerHealth
+		p.defaultMoves = gv.movesPerPlayer
 		// add default weapon
 		p.weapons = make([]Weapon, 0, 3)
 		w := Weapon{
@@ -251,26 +251,26 @@ func AddPlayers(client int8) {
 			movesCost:        4,
 		}
 		p.weapons = p.weapons.add(w)
-		GamePlayers = append(GamePlayers, p)
-		GameMap[p.pos.y][p.pos.x].occupied = true
+		gv.GamePlayers = append(gv.GamePlayers, p)
+		gv.GameMap[p.pos.y][p.pos.x].occupied = true
 	}
 }
 
-func makePlayerUpdates(client int8) map[int8]Player {
+func makePlayerUpdates(client int, gv *GameVariables) map[int8]Player {
 	playerUpdates := make(map[int8]Player)
 	// for each of this clients players
-	for cp := 0; cp < len(GamePlayers); cp++ {
-		if GamePlayers[cp].owner == client {
+	for cp := 0; cp < len(gv.GamePlayers); cp++ {
+		if gv.GamePlayers[cp].owner == client {
 			// add it to the map
-			playerUpdates[GamePlayers[cp].id] = GamePlayers[cp]
-			x := GamePlayers[cp].pos.x
-			y := GamePlayers[cp].pos.y
+			playerUpdates[gv.GamePlayers[cp].id] = gv.GamePlayers[cp]
+			x := gv.GamePlayers[cp].pos.x
+			y := gv.GamePlayers[cp].pos.y
 			// add everything it can see
-			for o := 0; o < len(GamePlayers); o++ {
-				if GamePlayers[o].owner != client {
-					sx, sy := trace(x, y, GamePlayers[o].pos.x, GamePlayers[o].pos.y, false)
-					if sx == GamePlayers[o].pos.x && sy == GamePlayers[o].pos.y {
-						playerUpdates[GamePlayers[o].id] = GamePlayers[o]
+			for o := 0; o < len(gv.GamePlayers); o++ {
+				if gv.GamePlayers[o].owner != client {
+					sx, sy := trace(x, y, gv.GamePlayers[o].pos.x, gv.GamePlayers[o].pos.y, false, gv)
+					if sx == gv.GamePlayers[o].pos.x && sy == gv.GamePlayers[o].pos.y {
+						playerUpdates[gv.GamePlayers[o].id] = gv.GamePlayers[o]
 					}
 				}
 			}
@@ -279,19 +279,19 @@ func makePlayerUpdates(client int8) map[int8]Player {
 	return playerUpdates
 }
 
-func getNumberPlayers(id int8) int8 {
+func getNumberPlayers(id int, gv *GameVariables) int8 {
 	var num int8
-	for i := 0; i < len(GamePlayers); i++ {
-		if GamePlayers[i].owner == id {
+	for i := 0; i < len(gv.GamePlayers); i++ {
+		if gv.GamePlayers[i].owner == id {
 			num++
 		}
 	}
 	return num
 }
 
-func getClientMoves(id int8) int {
+func getClientMoves(id int, gv *GameVariables) int {
 	var moves int
-	for _, p := range GamePlayers {
+	for _, p := range gv.GamePlayers {
 		if p.owner == id {
 			moves += int(p.moves)
 		}
@@ -299,21 +299,21 @@ func getClientMoves(id int8) int {
 	return moves
 }
 
-func clearClientMoves(id int8) {
-	for i := 0; i < len(GamePlayers); i++ {
-		if GamePlayers[i].owner == id {
-			GamePlayers[i].moves = 0
+func clearClientMoves(id int, gv *GameVariables) {
+	for i := 0; i < len(gv.GamePlayers); i++ {
+		if gv.GamePlayers[i].owner == id {
+			gv.GamePlayers[i].moves = 0
 		}
 	}
 }
 
-func giveClientMoves(id int8) {
-	for i := 0; i < len(GamePlayers); i++ {
-		if GamePlayers[i].owner == id {
-			if turnNumber <= 1 {
-				GamePlayers[i].moves = GamePlayers[i].defaultMoves / 2
+func giveClientMoves(id int, gv *GameVariables) {
+	for i := 0; i < len(gv.GamePlayers); i++ {
+		if gv.GamePlayers[i].owner == id {
+			if gv.turnNumber <= 1 {
+				gv.GamePlayers[i].moves = gv.GamePlayers[i].defaultMoves / 2
 			} else {
-				GamePlayers[i].moves = GamePlayers[i].defaultMoves
+				gv.GamePlayers[i].moves = gv.GamePlayers[i].defaultMoves
 			}
 		}
 	}

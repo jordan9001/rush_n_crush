@@ -14,10 +14,14 @@ import (
 	"time"
 )
 
+var GameCounter int = 0
+var Clients map[int]GameClient
+
 type GameClient struct {
-	Id       int8
-	ConWrite chan []byte
-	Nick     string
+	Id         int
+	ConWrite   chan []byte
+	Nick       string
+	GameNumber int
 }
 
 type Message struct {
@@ -35,8 +39,8 @@ func (m Message) MarshalJSON() ([]byte, error) {
 }
 
 type UpdateGroup struct {
-	YourId        int8
-	ClientTurn    int8
+	YourId        int
+	ClientTurn    int
 	TileUpdates   []Tile
 	PlayerUpdates map[int8]Player
 	WeaponHits    []HitInfo
@@ -82,13 +86,22 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Game State Variables
-var Clients map[int8]GameClient
-var ClientTurn int8 = -1
-var turnNumber int = 0
+type GameVariables struct {
+	GameNumber          int
+	GameMap             [][]Tile
+	GamePlayers         []Player
+	currentPlayerCount  int8
+	movesPerPlayer      int8
+	defaultPlayerHealth int16
+	playersPerClient    int8
+	ClientsForGame      int
+	ClientsInGame       int
+	ClientTurn          int
+	turnNumber          int
+}
 
 // The syntax is command:comma,separated,args
-func processCommand(id int8, message string) error {
+func processCommand(id int, message string, gv *GameVariables) error {
 	var err error = nil
 	// preallocate the update group
 	var u UpdateGroup
@@ -101,22 +114,31 @@ func processCommand(id int8, message string) error {
 	}
 
 	command := message[:i]
+	fmt.Printf("Got command %q\n", command)
 
 	// Run Commands
 	switch command {
 	case "get_gamestate": // no args
+		// Register client, but just wait in lobby until the admin sends the start command
+		// From the lobby they can change map, change number of clients, change game type, etc
+		// TODO
+		// Till then, just add to the game
+		c := Clients[id]
+		c.GameNumber = gv.GameNumber
+		Clients[id] = c
+		gv.ClientsInGame++
 		// They need to be sent the map
-		SendMap(id)
+		SendMap(id, gv)
 		// After sending, add in players for them
-		AddPlayers(id)
+		AddPlayers(id, gv)
 	case "player_move": // args = player_id, newx, newy, dir
 		// moves player, and updates dir
-		err = MovePlayer(message[i+1:], id, &u)
+		err = MovePlayer(message[i+1:], id, &u, gv)
 		if err != nil {
 			return err
 		}
 	case "fire": // args = player_id, weapon, dir
-		err = fire(message[i+1:], id, &u)
+		err = fire(message[i+1:], id, &u, gv)
 		if err != nil {
 			return err
 		}
@@ -124,12 +146,13 @@ func processCommand(id int8, message string) error {
 		// Set this client's nickname
 		c := Clients[id]
 		c.Nick = cleanString(message[i+1:])
+		Clients[id] = c
 		// Send everyone a who's who
-		sendWhosWho(-1)
+		sendWhosWho(-1, gv)
 		return nil
 	case "who_is_who":
 		// Send the requester a who's who
-		sendWhosWho(id)
+		sendWhosWho(id, gv)
 		return nil
 	case "set_default_moves": // arg = default numb
 		if id == -1 {
@@ -139,14 +162,14 @@ func processCommand(id int8, message string) error {
 				return err
 			}
 			if desired > 0 {
-				movesPerPlayer = int8(desired)
+				gv.movesPerPlayer = int8(desired)
 			}
 		}
 		return nil
 	case "map": // args = width,height,tile_typex0y0,title_typex1y0,...
 		// if a game has not been started, load a map
-		if ClientTurn < 0 {
-			LoadMap(message[i+1:])
+		if gv.ClientTurn < 0 {
+			LoadMap(message[i+1:], gv)
 		}
 	case "set_players_per_client": // arg = player_per_client
 		if id == -1 {
@@ -156,36 +179,39 @@ func processCommand(id int8, message string) error {
 				return err
 			}
 			if desired > 0 {
-				playersPerClient = int8(desired)
+				gv.playersPerClient = int8(desired)
 			}
 		}
 		return nil
 	case "end_turn": // no arg
 		// Move to next Client
-		clearClientMoves(id)
+		clearClientMoves(id, gv)
 	case "DISCONNECTED":
 		// remove the players
 		// remove the client
 	}
 	// check if we should update state (who's turn it is)
-	updateTurn()
+	updateTurn(gv)
 	// send updates to all users
-	err = updateClients(u)
+	err = updateClients(u, gv)
 	return err
 }
 
-func updateClients(u UpdateGroup) error {
+func updateClients(u UpdateGroup, gv *GameVariables) error {
 	for _, currentClient := range Clients {
+		if currentClient.GameNumber != gv.GameNumber {
+			continue
+		}
 		client_u := UpdateGroup{
 			YourId:      currentClient.Id,
-			ClientTurn:  ClientTurn,
+			ClientTurn:  gv.ClientTurn,
 			TileUpdates: u.TileUpdates,
 			WeaponHits:  u.WeaponHits,
 		}
-		client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id)
+		client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id, gv)
 		// Send the data
 		data, _ := client_u.MarshalJSON()
-		fmt.Printf("%d sees %q\n", currentClient.Id, data)
+		fmt.Printf("%d sees player changes %q\n\n", currentClient.Id, data)
 		m := Message{"update", data}
 		json, _ := m.MarshalJSON()
 		currentClient.ConWrite <- json
@@ -193,16 +219,16 @@ func updateClients(u UpdateGroup) error {
 	return nil
 }
 
-func updateTurn() {
+func updateTurn(gv *GameVariables) {
 	changedTurn := false
-	if len(Clients) >= 3 && len(GamePlayers) > 0 {
-		if ClientTurn < 0 {
-			ClientTurn = 0
+	if gv.ClientsInGame >= gv.ClientsForGame && len(gv.GamePlayers) > 0 {
+		if gv.ClientTurn < 0 {
+			gv.ClientTurn = 0
 			changedTurn = true
-		} else if getClientMoves(ClientTurn) <= 0 {
+		} else if getClientMoves(gv.ClientTurn, gv) <= 0 {
 			for {
-				ClientTurn = (ClientTurn + 1) % int8(len(Clients))
-				if getNumberPlayers(ClientTurn) > 0 {
+				gv.ClientTurn = (gv.ClientTurn + 1) % len(Clients)
+				if gv.GameNumber == Clients[gv.ClientTurn].GameNumber && getNumberPlayers(gv.ClientTurn, gv) > 0 {
 					break
 				}
 			}
@@ -210,16 +236,19 @@ func updateTurn() {
 		}
 	}
 	if changedTurn {
-		turnNumber = turnNumber + 1
+		gv.turnNumber = gv.turnNumber + 1
 		// Give the next client moves
-		giveClientMoves(ClientTurn)
+		giveClientMoves(gv.ClientTurn, gv)
 	}
 }
 
-func sendWhosWho(id int8) {
+func sendWhosWho(id int, gv *GameVariables) {
 	data := bytes.NewBufferString("{")
 	first := true
 	for _, v := range Clients {
+		if v.GameNumber != gv.GameNumber {
+			continue
+		}
 		if !first {
 			data.WriteString(",")
 		}
@@ -233,6 +262,9 @@ func sendWhosWho(id int8) {
 	// if id < 0, send it to everyone
 	sendable := data.Bytes()
 	for _, v := range Clients {
+		if v.GameNumber != gv.GameNumber {
+			continue
+		}
 		if id < 0 || v.Id == id {
 			v.ConWrite <- sendable
 		}
@@ -251,11 +283,11 @@ func cleanString(ins string) string {
 	return safe
 }
 
-func GameLoop() {
+func GameLoop(gv *GameVariables) {
 	for {
 		// Read from our clients
-		msg := <-con_read
-		err := processCommand(msg.client, msg.message)
+		msg := <-con_read[gv.GameNumber]
+		err := processCommand(msg.client, msg.message, gv)
 		if err != nil {
 			fmt.Printf("Got error \"%v\" for command %s\n", err, msg.message)
 			// Send error to the client who sent it
@@ -264,15 +296,32 @@ func GameLoop() {
 	}
 }
 
-func StartGame(startup_path string) (chan command, error) {
+func StartGame(startup_path string) (int, error) {
 	// seed our random
 	rand.Seed(time.Now().UnixNano())
+	// Make the game variables
+	var gv GameVariables
+	gv.GameNumber = GameCounter
+	GameCounter++
 	// Make our client map
-	Clients = make(map[int8]GameClient)
+	if len(Clients) == 0 {
+		Clients = make(map[int]GameClient)
+	}
+	// Make defaults
+	gv.currentPlayerCount = 0
+	gv.movesPerPlayer = 12
+	gv.defaultPlayerHealth = 100
+	gv.playersPerClient = 3
+	gv.ClientsForGame = 2
+	// set initial
+	gv.ClientsInGame = 0
+	gv.ClientTurn = -1
+	gv.turnNumber = 0
 	// Make our read chan
 	c := make(chan command)
+	con_read[gv.GameNumber] = c
 	// Make our map of players
-	GamePlayers = make([]Player, 0, 32)
+	gv.GamePlayers = make([]Player, 0, 32)
 
 	// run default commands from file
 	if len(startup_path) > 0 {
@@ -280,7 +329,7 @@ func StartGame(startup_path string) (chan command, error) {
 		f, err := os.Open(startup_path)
 		if err != nil {
 			fmt.Printf("Could not open %q\n", startup_path)
-			return nil, errors.New("Bad startup command file")
+			return -1, errors.New("Bad startup command file")
 		}
 		// run each command
 		fread := bufio.NewReader(f)
@@ -291,7 +340,7 @@ func StartGame(startup_path string) (chan command, error) {
 			if len(cmdstr) == 0 {
 				break
 			}
-			processCommand(-1, cmdstr[:len(cmdstr)-1])
+			processCommand(-1, cmdstr[:len(cmdstr)-1], &gv)
 
 			if err == io.EOF {
 				break
@@ -299,6 +348,6 @@ func StartGame(startup_path string) (chan command, error) {
 		}
 	}
 
-	go GameLoop()
-	return c, nil
+	go GameLoop(&gv)
+	return gv.GameNumber, nil
 }

@@ -1,7 +1,5 @@
 Server Side:
-	Vision
-	Weapons
-	Destruction
+	Move to a structure for game variables passed around
 	Chat (with origin player? Could be fun)
 	Handle disconnects
 	Handle mutiple clients

@@ -7,30 +7,31 @@ import (
 	"net/http"
 )
 
-var id_counter int8 = 0
-var con_read chan command
+var id_counter int = 0
+var con_read map[int]chan command
 
 type command struct {
-	client  int8
+	client  int
 	message string
 }
 
-func readClient(ws *websocket.Conn, con_id int8) {
+func readClient(ws *websocket.Conn, con_id int) {
 	data := make([]byte, 32*1024)
 	for {
+		client_game := Clients[con_id].GameNumber
 		// continuously read from this connection
 		nr, er := ws.Read(data)
 		if nr > 0 {
 			message := string(data[:nr])
 			fmt.Printf("Client %d : %q\n", con_id, message)
-			con_read <- command{con_id, message}
+			con_read[client_game] <- command{con_id, message}
 		}
 		if er == io.EOF {
 			fmt.Printf("Client %d Disconnected\n", con_id)
 			// close write
 			Clients[con_id].ConWrite <- []byte("DISCONNECTED")
 			// send disconnect command
-			con_read <- command{con_id, "DISCONNECTED:"}
+			con_read[client_game] <- command{con_id, "DISCONNECTED:"}
 			return
 		} else if er != nil {
 			fmt.Printf("Client %d Read Errored\n", con_id)
@@ -39,7 +40,7 @@ func readClient(ws *websocket.Conn, con_id int8) {
 	}
 }
 
-func writeClient(ws *websocket.Conn, con_write chan []byte, con_id int8) {
+func writeClient(ws *websocket.Conn, con_write chan []byte, con_id int) {
 	for {
 		// write if we have a message to write
 		to_write := <-con_write
@@ -59,23 +60,25 @@ func writeClient(ws *websocket.Conn, con_write chan []byte, con_id int8) {
 }
 
 func handleClient(ws *websocket.Conn) {
-	var con_id int8
+	var con_id int
 	con_id = id_counter
-	id_counter += 1
+	id_counter++
 
 	fmt.Printf("Got a new client: %d\n", con_id)
 
 	// Add channels for output and input to this connection
 	con_write := make(chan []byte)
 
+	gn := 0
 	// Add this connection to our connection map
 	Clients[con_id] = GameClient{
-		Id:       con_id,
-		ConWrite: con_write,
+		Id:         con_id,
+		ConWrite:   con_write,
+		GameNumber: gn,
 	}
 
 	// Alert the Game Engine
-	con_read <- command{con_id, "get_gamestate:"}
+	con_read[gn] <- command{con_id, "get_gamestate:"}
 
 	// Begin communication loop
 	go readClient(ws, con_id)
@@ -84,8 +87,9 @@ func handleClient(ws *websocket.Conn) {
 
 func StartServer(path, port, startup_path string) {
 	var err error
-	// First set up our GameLogic
-	con_read, err = StartGame(startup_path)
+	con_read = make(map[int]chan command)
+	// For now, just start a game
+	_, err = StartGame(startup_path)
 	if err != nil {
 		panic(err)
 	}

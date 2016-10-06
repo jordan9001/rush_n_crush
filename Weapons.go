@@ -9,7 +9,7 @@ import (
 
 type Weapon struct {
 	name             string
-	damage           func(start_x, start_y, direction int16, w Weapon, u *UpdateGroup) bool
+	damage           func(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool
 	playerDamageMult int16
 	tileDamageMult   int16
 	damageType       string
@@ -75,21 +75,21 @@ var GameWeapons []Weapon
 
 // damage functions
 // should only be called if the weapon has enough ammo, and the player has enough moves
-func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup) bool {
+func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
 	// Add some random to the shots
 	rand_max := 24
 	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 	// ray trace till we hit something
-	hx, hy := traceDir(start_x, start_y, direction, true)
+	hx, hy := traceDir(start_x, start_y, direction, true, gv)
 	fmt.Printf("Shot %d,%d\n", hx, hy)
 	// Update for animation
 	u.WeaponHits = append(u.WeaponHits, HitInfo{damageType: w.damageType, pos: Position{x: hx, y: hy}})
 	var baseDamage int16 = 1
 	// else hit the tile
-	if GameMap[hy][hx].occupied == true {
-		damagePlayer(hx, hy, baseDamage*w.playerDamageMult, u)
+	if gv.GameMap[hy][hx].occupied == true {
+		damagePlayer(hx, hy, baseDamage*w.playerDamageMult, u, gv)
 	} else {
-		damageTile(hx, hy, baseDamage*w.tileDamageMult, u)
+		damageTile(hx, hy, baseDamage*w.tileDamageMult, u, gv)
 	}
 	return true
 }
