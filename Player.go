@@ -193,12 +193,14 @@ func fire(message string, client int, u *UpdateGroup, gv *GameVariables) error {
 					// fire it
 					gv.GamePlayers[p].weapons[w].damage(gv.GamePlayers[p].pos.x, gv.GamePlayers[p].pos.y, dir, gv.GamePlayers[p].weapons[w], u, gv)
 					fmt.Printf("Shot something!\n")
+					fmt.Printf("old p = %d\n", p)
 					// a Player may have died, we need to get p again
-					for newp := 0; newp < len(gv.GamePlayers); p++ {
+					for newp := 0; newp < len(gv.GamePlayers); newp++ {
 						if pid == gv.GamePlayers[newp].id {
 							p = newp
 						}
 					}
+					fmt.Printf("new p = %d\n", p)
 					if gv.GamePlayers[p].weapons[w].ammo > 0 {
 						gv.GamePlayers[p].weapons[w].ammo -= 1
 					}
@@ -241,15 +243,7 @@ func AddPlayers(client int, gv *GameVariables) {
 		p.defaultMoves = gv.movesPerPlayer
 		// add default weapon
 		p.weapons = make([]Weapon, 0, 3)
-		w := Weapon{
-			name:             "pistol",
-			damage:           damageStraight,
-			playerDamageMult: 25,
-			tileDamageMult:   30,
-			damageType:       "bullet",
-			ammo:             -1,
-			movesCost:        4,
-		}
+		w := pistol.makeCopy()
 		p.weapons = p.weapons.add(w)
 		gv.GamePlayers = append(gv.GamePlayers, p)
 		gv.GameMap[p.pos.y][p.pos.x].occupied = true

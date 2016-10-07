@@ -87,6 +87,7 @@ RushNCrush.prototype.handle_click = function() {
 	// shoot if it is your turn and you have a guy selected
 	if (this.user_turn == this.userid && this.player_index >= 0) {
 		this.ws.send("fire:"+ this.players[this.player_index].id +","+ this.players[this.player_index].weapons[0].name +","+ this.players[this.player_index].dir);
+	console.log("sent fire")
 	}	
 };
 
@@ -110,6 +111,7 @@ RushNCrush.prototype.handle_message = function(message_type, data) {
 
 RushNCrush.prototype.end_turn = function() {
 	this.ws.send("end_turn:");
+	console.log("sent end_turn")
 }
 
 RushNCrush.prototype.move_player = function(dx, dy) {
@@ -130,6 +132,7 @@ RushNCrush.prototype.move_player = function(dx, dy) {
 	}
 	// send the move
 	this.ws.send("player_move:"+ this.players[i].id +","+ (this.players[i].pos.x + dx) +","+ (this.players[i].pos.y + dy) +","+ (this.players[i].dir));
+	console.log("sent player_move")
 };
 
 RushNCrush.prototype.next_player = function() {

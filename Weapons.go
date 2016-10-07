@@ -15,6 +15,21 @@ type Weapon struct {
 	damageType       string
 	ammo             int16
 	movesCost        int8
+	distance         int16
+}
+
+func (w Weapon) makeCopy() (r Weapon) {
+	r = Weapon{
+		name:             w.name,
+		damage:           w.damage,
+		playerDamageMult: w.playerDamageMult,
+		tileDamageMult:   w.tileDamageMult,
+		damageType:       w.damageType,
+		ammo:             w.ammo,
+		movesCost:        w.movesCost,
+		distance:         w.distance,
+	}
+	return
 }
 
 func (w Weapon) MarshalJSON() ([]byte, error) {
@@ -80,7 +95,7 @@ func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup,
 	rand_max := 24
 	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 	// ray trace till we hit something
-	hx, hy := traceDir(start_x, start_y, direction, true, gv)
+	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, gv)
 	fmt.Printf("Shot %d,%d\n", hx, hy)
 	// Update for animation
 	u.WeaponHits = append(u.WeaponHits, HitInfo{damageType: w.damageType, pos: Position{x: hx, y: hy}})
@@ -92,4 +107,17 @@ func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup,
 		damageTile(hx, hy, baseDamage*w.tileDamageMult, u, gv)
 	}
 	return true
+}
+
+// Weapons
+
+var pistol Weapon = Weapon{
+	name:             "pistol",
+	damage:           damageStraight,
+	playerDamageMult: 25,
+	tileDamageMult:   30,
+	damageType:       "bullet",
+	ammo:             -1,
+	movesCost:        4,
+	distance:         64,
 }

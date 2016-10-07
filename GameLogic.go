@@ -211,7 +211,7 @@ func updateClients(u UpdateGroup, gv *GameVariables) error {
 		client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id, gv)
 		// Send the data
 		data, _ := client_u.MarshalJSON()
-		fmt.Printf("%d sees player changes %q\n\n", currentClient.Id, data)
+		fmt.Printf("%d sees %q\n\n", currentClient.Id, data)
 		m := Message{"update", data}
 		json, _ := m.MarshalJSON()
 		currentClient.ConWrite <- json
@@ -237,6 +237,7 @@ func updateTurn(gv *GameVariables) {
 	}
 	if changedTurn {
 		gv.turnNumber = gv.turnNumber + 1
+		fmt.Printf("\tTurn : %d\n", gv.turnNumber)
 		// Give the next client moves
 		giveClientMoves(gv.ClientTurn, gv)
 	}

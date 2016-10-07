@@ -159,13 +159,12 @@ func SendMap(id int, gv *GameVariables) {
 	Clients[id].ConWrite <- sendable
 }
 
-func traceDir(px, py, angle int16, chanceCoverBlock bool, gv *GameVariables) (int16, int16) {
+func traceDir(px, py, angle, distance int16, chanceCoverBlock bool, gv *GameVariables) (int16, int16) {
 	var rad_ang float64 = math.Pi * float64(angle) / 180
 	sin := math.Sin(rad_ang)
 	cos := math.Cos(rad_ang)
-	var length int16 = int16(len(gv.GameMap) + len(gv.GameMap[0]))
-	var ex int16 = int16(cos*float64(length)) + px
-	var ey int16 = int16(sin*float64(length)) + py
+	var ex int16 = int16(cos*float64(distance)) + px
+	var ey int16 = int16(sin*float64(distance)) + py
 	return trace(px, py, ex, ey, chanceCoverBlock, gv)
 }
 
@@ -213,7 +212,7 @@ func trace(px, py, x, y int16, chanceCoverBlock bool, gv *GameVariables) (int16,
 		} else if chanceCoverBlock {
 			if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
 				// we have a chance to hit here, depending on how close we are to the cover
-				dist2 := float64(((x - px) * (x - px)) + ((y - py) * (y - py)))
+				dist2 := float64(((sx - px) * (sx - px)) + ((sy - py) * (sy - py)))
 				chancepass := (CHANCE_M / dist2) + CHANCE_B
 				randval := rand.Float64()
 				if randval > chancepass {
