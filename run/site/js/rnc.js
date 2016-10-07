@@ -210,7 +210,7 @@ RushNCrush.prototype.update_game = function(data) {
 	// handle hit tiles
 	var h_t = data.hit_tiles;
 	for (var i=0; i<h_t.length; i++) {
-		this.hit_animate(h_t[i].pos.x, h_t[i].pos.y, h_t[i].damage_type);
+		this.hit_animate(h_t[i].pos.x, h_t[i].pos.y, h_t[i].from_pos.x, h_t[i].from_pos.y, h_t[i].damage_type);
 	}
 	return true;
 };
@@ -250,20 +250,33 @@ RushNCrush.prototype.run_animations = function(callback) {
 	animate();
 }
 
-RushNCrush.prototype.hit_animate = function(hitx, hity, type) {
+RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
 	var steps = 45;
 	var anistep = 1;
 	var that = this;
 	var topl = this.coord2px(hitx,hity);
+	var tx1 = topl[0] + (this.zoom/2);
+	var ty1 = topl[1] + (this.zoom/2);
+	var from_topl = this.coord2px(fromx,fromy);
+	var tx2 = from_topl[0] + (this.zoom/2);
+	var ty2 = from_topl[1] + (this.zoom/2);
 	var w = this.zoom;
 	var draw_hit = function() {
 		if (anistep >= steps) {
 			return false;
 		}
-		var fade = 1.0 / anistep;
+		// block hit
+		var fade = 2.0 / anistep;
 		var pad = -0.5 + (w * (anistep / (steps * 2)));
 		that.ctx.fillStyle = "rgba(200,0,0,"+ fade +")";
 		that.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+		// shot trace
+		that.ctx.strokeStyle = "rgba(255,263,33,"+ fade +")";
+		that.ctx.linewidth = 9;
+		that.ctx.beginPath();
+		that.ctx.moveTo(tx1, ty1);
+		that.ctx.lineTo(tx2, ty2);
+		that.ctx.stroke();
 		anistep++;
 		return true;
 	}

@@ -74,6 +74,7 @@ func (wc WeaponCache) MarshalJSON() ([]byte, error) {
 type HitInfo struct {
 	damageType string
 	pos        Position
+	fromPos    Position
 }
 
 func (h HitInfo) MarshalJSON() ([]byte, error) {
@@ -81,6 +82,9 @@ func (h HitInfo) MarshalJSON() ([]byte, error) {
 	buf.WriteString(h.damageType)
 	buf.WriteString("\",\"pos\":")
 	pos, _ := h.pos.MarshalJSON()
+	buf.Write(pos)
+	buf.WriteString(",\"from_pos\":")
+	pos, _ = h.fromPos.MarshalJSON()
 	buf.Write(pos)
 	buf.WriteString("}")
 	return buf.Bytes(), nil
@@ -98,7 +102,7 @@ func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup,
 	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, gv)
 	fmt.Printf("Shot %d,%d\n", hx, hy)
 	// Update for animation
-	u.WeaponHits = append(u.WeaponHits, HitInfo{damageType: w.damageType, pos: Position{x: hx, y: hy}})
+	u.WeaponHits = append(u.WeaponHits, HitInfo{damageType: w.damageType, pos: Position{x: hx, y: hy}, fromPos: Position{x: start_x, y: start_y}})
 	var baseDamage int16 = 1
 	// else hit the tile
 	if gv.GameMap[hy][hx].occupied == true {
