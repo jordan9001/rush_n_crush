@@ -398,6 +398,14 @@ RushNCrush.prototype.draw_player = function(player) {
 	this.ctx.lineTo(center[0], center[1]);
 	this.ctx.fill();
 	this.ctx.stroke();
+	// draw health
+	if (player.owner == this.userid) {
+		this.ctx.fillStyle = this.team_color[player.owner];
+		var bottoml = this.coord2px(player.pos.x, player.pos.y + 1);
+		var height = this.zoom / 15;
+		var width = this.zoom * (player.health / player.max_health);
+		this.ctx.fillRect(bottoml[0], bottoml[1] + height, width, height);
+	}
 }
 
 RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
@@ -460,19 +468,24 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 RushNCrush.prototype.draw_ui = function() {
 	// Draw current Turn
 	var box_size = 12;
-	var pad = 3;
+	var pad = 4;
 
 	this.ctx.fillStyle = this.team_color[this.user_turn];
+	this.ctx.strokeStyle = "#000";
+	this.ctx.lineWidth = 1;
 
-	var num_boxes = 1;
+	var num_boxes = 0;
 	if (this.userid == this.user_turn && this.player_index >= 0) {
 		num_boxes = this.players[this.player_index].moves;
 	}
-	for (var i=0; i<num_boxes; i++) {
+	for (var i=0; i<=num_boxes; i++) {
 		var x = pad;
 		var y = (i * (pad + box_size)) + pad;
 
 		this.ctx.fillRect(x,y, box_size,box_size);
+		if (i == 0) {
+			this.ctx.strokeRect(x - pad/2,y - pad/2, box_size + pad, box_size + pad);
+		}
 	}
 }
 
