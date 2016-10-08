@@ -159,13 +159,13 @@ func SendMap(id int, gv *GameVariables) {
 	Clients[id].ConWrite <- sendable
 }
 
-func traceDir(px, py, angle, distance int16, chanceCoverBlock bool, gv *GameVariables) (int16, int16) {
+func traceDir(px, py, angle, distance int16, chanceCoverBlock bool, stopBeforeHit bool, gv *GameVariables) (int16, int16) {
 	var rad_ang float64 = math.Pi * float64(angle) / 180
 	sin := math.Sin(rad_ang)
 	cos := math.Cos(rad_ang)
 	var ex int16 = int16(cos*float64(distance)) + px
 	var ey int16 = int16(sin*float64(distance)) + py
-	return trace(px, py, ex, ey, chanceCoverBlock, gv)
+	return trace(px, py, ex, ey, chanceCoverBlock, stopBeforeHit, gv)
 }
 
 // Chance to hit cover
@@ -174,7 +174,7 @@ const (
 	CHANCE_B float64 = 0.6
 )
 
-func trace(px, py, x, y int16, chanceCoverBlock bool, gv *GameVariables) (int16, int16) {
+func trace(px, py, x, y int16, chanceCoverBlock bool, stopBeforeHit bool, gv *GameVariables) (int16, int16) {
 	// fmt.Printf("Trace from %d,%d to %d,%d: ", px, py, x, y)
 	var dx, dirx, dy, diry int16
 	if x > px {
@@ -194,6 +194,8 @@ func trace(px, py, x, y int16, chanceCoverBlock bool, gv *GameVariables) (int16,
 
 	sx := px
 	sy := py
+	prevx := px
+	prevy := py
 	err := dx - dy
 	dx *= 2
 	dy *= 2
@@ -221,6 +223,9 @@ func trace(px, py, x, y int16, chanceCoverBlock bool, gv *GameVariables) (int16,
 			}
 		}
 
+		prevx = sx
+		prevy = sy
+
 		if err > 0 {
 			sx = sx + dirx
 			err = err - dy
@@ -228,6 +233,9 @@ func trace(px, py, x, y int16, chanceCoverBlock bool, gv *GameVariables) (int16,
 			sy = sy + diry
 			err = err + dx
 		}
+	}
+	if stopBeforeHit {
+		return prevx, prevy
 	}
 	return sx, sy
 }

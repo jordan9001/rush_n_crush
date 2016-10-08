@@ -94,7 +94,7 @@ var GameWeapons []Weapon
 
 // damage functions
 // should only be called if the weapon has enough ammo, and the player has enough moves
-func genericDamage(hx, hy, start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
+func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
 	// Check bounds
 	if hx < 0 || hx > int16(len(gv.GameMap[0])) || hy < 0 || hy > int16(len(gv.GameMap)) {
 		return false
@@ -103,9 +103,9 @@ func genericDamage(hx, hy, start_x, start_y, direction int16, w Weapon, u *Updat
 	fmt.Printf("Shot %d,%d\n", hx, hy)
 
 	if gv.GameMap[hy][hx].occupied == true {
-		damagePlayer(hx, hy, w.playerDamageMult, u, gv)
+		damagePlayer(hx, hy, int16(float32(w.playerDamageMult)*multiplier), u, gv)
 	} else {
-		damageTile(hx, hy, w.tileDamageMult, u, gv)
+		damageTile(hx, hy, int16(float32(w.tileDamageMult)*multiplier), u, gv)
 	}
 
 	// Update for animation
@@ -118,9 +118,9 @@ func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup,
 	rand_max := 24
 	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 	// ray trace till we hit something
-	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, gv)
+	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, false, gv)
 
-	return genericDamage(hx, hy, start_x, start_y, direction, w, u, gv)
+	return genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
 }
 
 func damageMelee(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
@@ -142,7 +142,7 @@ func damageMelee(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv
 		hx = start_x
 		hy = start_y - w.distance
 	}
-	return genericDamage(hx, hy, start_x, start_y, direction, w, u, gv)
+	return genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
 }
 
 func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
@@ -150,10 +150,22 @@ func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup
 	rand_max := 9
 	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 	// ray trace till we hit something
-	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, gv)
-	for i := int16(-1); i <= 1; i++ {
-		for j := int16(-1); j <= 1; j++ {
-			genericDamage(hx+i, hy+j, start_x, start_y, direction, w, u, gv)
+	ex, ey := traceDir(start_x, start_y, direction, w.distance, true, true, gv)
+	genericDamage(ex, ey, start_x, start_y, direction, 1, w, u, gv)
+
+	aoe := [][]float32{
+		[]float32{0.0, 0.0, 0.3, 0.0, 0.0},
+		[]float32{0.0, 0.6, 0.9, 0.6, 0.0},
+		[]float32{0.3, 0.9, 0.0, 0.9, 0.3},
+		[]float32{0.0, 0.6, 0.9, 0.6, 0.0},
+		[]float32{0.0, 0.0, 0.3, 0.0, 0.0},
+	}
+	for i := 0; i < len(aoe[0]); i++ {
+		for j := 0; j < len(aoe); j++ {
+			if aoe[i][j] > 0 {
+				hx, hy := trace(ex, ey, ex+int16(i-(len(aoe[0])/2)), ey+int16(j-(len(aoe)/2)), true, false, gv)
+				genericDamage(hx, hy, ex, ey, direction, aoe[i][j], w, u, gv)
+			}
 		}
 	}
 	return true
@@ -189,7 +201,7 @@ var bazooka Weapon = Weapon{
 	playerDamageMult: 50,
 	tileDamageMult:   75,
 	damageType:       "explosion",
-	ammo:             -1,
-	movesCost:        8,
+	ammo:             3,
+	movesCost:        10,
 	distance:         45,
 }

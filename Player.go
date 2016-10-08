@@ -273,7 +273,7 @@ func makePlayerUpdates(client int, gv *GameVariables) map[int8]Player {
 			// add everything it can see
 			for o := 0; o < len(gv.GamePlayers); o++ {
 				if gv.GamePlayers[o].owner != client {
-					sx, sy := trace(x, y, gv.GamePlayers[o].pos.x, gv.GamePlayers[o].pos.y, false, gv)
+					sx, sy := trace(x, y, gv.GamePlayers[o].pos.x, gv.GamePlayers[o].pos.y, false, false, gv)
 					if sx == gv.GamePlayers[o].pos.x && sy == gv.GamePlayers[o].pos.y {
 						playerUpdates[gv.GamePlayers[o].id] = gv.GamePlayers[o]
 					}

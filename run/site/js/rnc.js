@@ -52,6 +52,7 @@ function RushNCrush(url, canvas_id) {
 		var py = event.clientY - rect.top;
 		coord = that.px2coord(px, py);
 		that.handle_point(coord[0], coord[1]);
+		
 	});
 	document.addEventListener('keydown', function(evt) {
 		if (evt.keyCode == 65 || evt.keyCode == 37) {
@@ -96,7 +97,7 @@ RushNCrush.prototype.handle_click = function() {
 			wi = 0;
 		}
 		this.ws.send("fire:"+ this.players[this.player_index].id +","+ this.players[this.player_index].weapons[wi].name +","+ this.players[this.player_index].dir);
-	console.log("sent fire")
+		console.log("sent fire");
 	}	
 };
 
@@ -120,8 +121,10 @@ RushNCrush.prototype.handle_message = function(message_type, data) {
 
 RushNCrush.prototype.choose_weapon = function(wi) {
 	if (this.player_index >= 0 && this.players[this.player_index].weapons.length > wi) { 
-		this.players[this.player_index].selected_weapon = wi;
-		this.draw(false);
+		if (this.players[this.player_index].weapons[wi].ammo != 0 && this.players[this.player_index].moves >= this.players[this.player_index].weapons[wi].move_cost) {
+			this.players[this.player_index].selected_weapon = wi;
+			this.draw(false);
+		}
 	}
 	
 };
@@ -534,11 +537,11 @@ RushNCrush.prototype.draw_ui = function() {
 	this.ctx.strokeStyle = "#000";
 	this.ctx.lineWidth = 1;
 
-	var num_boxes = 0;
+	var player_moves = 0;
 	if (this.userid == this.user_turn && this.player_index >= 0) {
-		num_boxes = this.players[this.player_index].moves;
+		player_moves = this.players[this.player_index].moves;
 	}
-	for (var i=0; i<=num_boxes; i++) {
+	for (var i=0; i<=player_moves; i++) {
 		var x = pad;
 		var y = (i * (pad + box_size)) + pad;
 		this.ctx.fillRect(x,y, box_size,box_size);
@@ -546,19 +549,26 @@ RushNCrush.prototype.draw_ui = function() {
 			this.ctx.strokeRect(x - pad/2,y - pad/2, box_size + pad, box_size + pad);
 		}
 	}
+
 	// Weapons
 	if (this.player_index < 0) {
 		return;
 	}
 	this.ctx.fillStyle = "#FFF";
 	this.ctx.font = "12px Verdana";
-	var box_size = 2 * this.ctx.measureText("M").width;
+	var text_height = this.ctx.measureText("M").width;
+	var box_size = 2 * text_height;
 	for (var i=0; i<this.players[this.player_index].weapons.length; i++) {
 		var text = this.players[this.player_index].weapons[i].name +" :"+ (i+1);
 		var w = this.ctx.measureText(text).width + (2 * pad);
 		var x = this.canvas.width - (pad + w);
 		var y = (i * (pad + box_size)) + pad;
 		this.ctx.fillStyle = "#FFF";
+		var ammo = this.players[this.player_index].weapons[i].ammo;
+		var move_cost = this.players[this.player_index].weapons[i].move_cost;
+		if (ammo == 0 || player_moves < move_cost) {
+			this.ctx.fillStyle = "#999"
+		}
 		this.ctx.fillRect(x, y, w, box_size);
 
 		var wi = this.players[this.player_index].selected_weapon
@@ -570,6 +580,9 @@ RushNCrush.prototype.draw_ui = function() {
 		}
 
 		this.ctx.fillStyle = "#000";
+		if (ammo == 0 || player_moves < move_cost) {
+			this.ctx.fillStyle = "#555"
+		}
 		this.ctx.fillText(text, x + pad, y + (box_size * 0.75));
 	}
 }
