@@ -7,5 +7,5 @@ import (
 
 func main() {
 	go http.ListenAndServe(":8080", http.FileServer(http.Dir("/var/www/site")))
-	rush_n_crush.StartServer("/", ":12345", "./run/startup.cmd")
+	rush_n_crush.StartServer("/", ":12345", "./run/startup2.cmd")
 }

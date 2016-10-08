@@ -154,6 +154,11 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		// Send the requester a who's who
 		sendWhosWho(id, gv)
 		return nil
+	case "map": // args = width,height,tile_typex0y0,title_typex1y0,...
+		// if a game has not been started, load a map
+		if gv.ClientTurn < 0 {
+			LoadMap(message[i+1:], gv)
+		}
 	case "set_default_moves": // arg = default numb
 		if id == -1 {
 			var desired int64
@@ -166,11 +171,6 @@ func processCommand(id int, message string, gv *GameVariables) error {
 			}
 		}
 		return nil
-	case "map": // args = width,height,tile_typex0y0,title_typex1y0,...
-		// if a game has not been started, load a map
-		if gv.ClientTurn < 0 {
-			LoadMap(message[i+1:], gv)
-		}
 	case "set_players_per_client": // arg = player_per_client
 		if id == -1 {
 			var desired int64
@@ -180,6 +180,18 @@ func processCommand(id int, message string, gv *GameVariables) error {
 			}
 			if desired > 0 {
 				gv.playersPerClient = int8(desired)
+			}
+		}
+		return nil
+	case "set_clients_per_game": // arg = player_per_client
+		if id == -1 {
+			var desired int64
+			desired, err = strconv.ParseInt(message[i+1:], 10, 64)
+			if err != nil {
+				return err
+			}
+			if desired > 0 {
+				gv.ClientsForGame = int(desired)
 			}
 		}
 		return nil
