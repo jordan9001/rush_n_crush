@@ -50,6 +50,31 @@ func (p Player) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func AddPlayers(client int, gv *GameVariables) {
+	for i := 0; i < int(gv.playersPerClient); i++ {
+		var p Player
+		p.id = gv.currentPlayerCount
+		gv.currentPlayerCount++
+		p.owner = client
+		// TODO: Spawn locations
+		p.pos = getRandomPosition(gv)
+		p.moves = 0
+		p.health = gv.defaultPlayerHealth
+		p.maxHealth = p.health
+		p.defaultMoves = gv.movesPerPlayer
+		// add default weapon
+		p.weapons = make([]Weapon, 0, 3)
+		w := pistol.makeCopy()
+		p.weapons = p.weapons.add(w)
+		w = shovel.makeCopy()
+		p.weapons = p.weapons.add(w)
+		w = bazooka.makeCopy()
+		p.weapons = p.weapons.add(w)
+		gv.GamePlayers = append(gv.GamePlayers, p)
+		gv.GameMap[p.pos.y][p.pos.x].occupied = true
+	}
+}
+
 func MovePlayer(arg_string string, id int, u *UpdateGroup, gv *GameVariables) error {
 	var newx, newy, dir int16
 	var pid int8
@@ -194,18 +219,25 @@ func fire(message string, client int, u *UpdateGroup, gv *GameVariables) error {
 						return errors.New("Out of Ammo")
 					}
 					// fire it
-					gv.GamePlayers[p].weapons[w].damage(gv.GamePlayers[p].pos.x, gv.GamePlayers[p].pos.y, dir, gv.GamePlayers[p].weapons[w], u, gv)
-					fmt.Printf("Shot something!\n")
-					// a Player may have died, we need to get p again
-					for newp := 0; newp < len(gv.GamePlayers); newp++ {
-						if pid == gv.GamePlayers[newp].id {
-							p = newp
+					if gv.GamePlayers[p].weapons[w].damage(gv.GamePlayers[p].pos.x, gv.GamePlayers[p].pos.y, dir, gv.GamePlayers[p].weapons[w], u, gv) {
+						fmt.Printf("Shot something!\n")
+						// a Player may have died, we need to get p again
+						foundp := false
+						for newp := 0; newp < len(gv.GamePlayers); newp++ {
+							if pid == gv.GamePlayers[newp].id {
+								p = newp
+								foundp = true
+							}
 						}
+						if !foundp {
+							// dude killed itself
+							return nil
+						}
+						if gv.GamePlayers[p].weapons[w].ammo > 0 {
+							gv.GamePlayers[p].weapons[w].ammo -= 1
+						}
+						gv.GamePlayers[p].moves -= gv.GamePlayers[p].weapons[w].movesCost
 					}
-					if gv.GamePlayers[p].weapons[w].ammo > 0 {
-						gv.GamePlayers[p].weapons[w].ammo -= 1
-					}
-					gv.GamePlayers[p].moves -= gv.GamePlayers[p].weapons[w].movesCost
 					return nil
 				}
 			}
@@ -226,27 +258,6 @@ func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) {
 
 			}
 		}
-	}
-}
-
-func AddPlayers(client int, gv *GameVariables) {
-	for i := 0; i < int(gv.playersPerClient); i++ {
-		var p Player
-		p.id = gv.currentPlayerCount
-		gv.currentPlayerCount++
-		p.owner = client
-		// TODO: Spawn locations
-		p.pos = getRandomPosition(gv)
-		p.moves = 0
-		p.health = gv.defaultPlayerHealth
-		p.maxHealth = p.health
-		p.defaultMoves = gv.movesPerPlayer
-		// add default weapon
-		p.weapons = make([]Weapon, 0, 3)
-		w := pistol.makeCopy()
-		p.weapons = p.weapons.add(w)
-		gv.GamePlayers = append(gv.GamePlayers, p)
-		gv.GameMap[p.pos.y][p.pos.x].occupied = true
 	}
 }
 

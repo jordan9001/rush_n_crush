@@ -66,6 +66,8 @@ function RushNCrush(url, canvas_id) {
 			that.next_player();
 		} else if (evt.keyCode == 13) {
 			that.end_turn();
+		} else if (evt.keyCode <= 57 && evt.keyCode >= 49) {
+			that.choose_weapon(evt.keyCode - 49);
 		}
 		evt.returnValue = false;
 		return false
@@ -84,9 +86,16 @@ RushNCrush.prototype.handle_point = function(x, y) {
 };
 
 RushNCrush.prototype.handle_click = function() {
+	if (this.animating) {
+		return;
+	}
 	// shoot if it is your turn and you have a guy selected
 	if (this.user_turn == this.userid && this.player_index >= 0) {
-		this.ws.send("fire:"+ this.players[this.player_index].id +","+ this.players[this.player_index].weapons[0].name +","+ this.players[this.player_index].dir);
+		var wi = this.players[this.player_index].selected_weapon
+		if (wi == undefined) {
+			wi = 0;
+		}
+		this.ws.send("fire:"+ this.players[this.player_index].id +","+ this.players[this.player_index].weapons[wi].name +","+ this.players[this.player_index].dir);
 	console.log("sent fire")
 	}	
 };
@@ -109,10 +118,18 @@ RushNCrush.prototype.handle_message = function(message_type, data) {
 	}
 };
 
+RushNCrush.prototype.choose_weapon = function(wi) {
+	if (this.player_index >= 0 && this.players[this.player_index].weapons.length > wi) { 
+		this.players[this.player_index].selected_weapon = wi;
+		this.draw(false);
+	}
+	
+};
+
 RushNCrush.prototype.end_turn = function() {
 	this.ws.send("end_turn:");
 	console.log("sent end_turn")
-}
+};
 
 RushNCrush.prototype.move_player = function(dx, dy) {
 	if (this.animating) {
@@ -159,6 +176,10 @@ RushNCrush.prototype.update_game = function(data) {
 		return true;
 	}
 	// for every player, if updated, cool, if not, ditch 'em
+	var focusid = -1;
+	if (this.player_index > -1) {
+		focusid = this.players[this.player_index].id;
+	}
 	for (var p=0; p<this.players.length; p++) {
 		p_updated = false;
 		for (var i=0; i<u_p.length; i++) {
@@ -173,8 +194,11 @@ RushNCrush.prototype.update_game = function(data) {
 					this.focux = u_p[i].pos.x;
 					this.focuy = u_p[i].pos.y;
 				}
+				// keep the correct weapon selected
+				var selected_weapon = this.players[p].selected_weapon;
 				// remove this from our updated array, and break
 				this.players[p] = u_p.splice(i,1)[0];
+				this.players[p].selected_weapon = selected_weapon;
 				p_updated = true;
 				break;
 			}
@@ -182,11 +206,11 @@ RushNCrush.prototype.update_game = function(data) {
 		if (!p_updated) {
 			// remove the player, and adjust
 			this.players.splice(p,1);
-			// if this player is your focus, reset
-			if (p == this.player_index) {
-				this.player_index = -1;
+			// reset focus
+			this.player_index = -1;
+			if (focusid >= 0) {
 				for (var np=0; np < this.players.length; np++) {
-					if (this.players[np].owner == this.userid) {
+					if (this.players[np].id == focusid) {
 						this.focux = this.players[np].pos.x;
 						this.focuy = this.players[np].pos.y;
 						this.player_index = np;
@@ -242,6 +266,28 @@ RushNCrush.prototype.run_animations = function(callback) {
 			that.animating = false;
 			callback();
 			return;
+		}else {
+			for (var i=0; i<that.player_ani_queue.length; i++) {
+				if (that.player_ani_queue[i]() == false) {
+					that.player_ani_queue.splice(i,1);
+					i--;
+				}
+			}
+		}
+		window.requestAnimationFrame(animate);
+	}
+	animate();
+}
+
+RushNCrush.prototype.run_animations_oneatatime = function(callback) {
+	that = this;
+	this.animating = true;
+	var animate = function(dt) {
+		that.draw(false);
+		if (that.player_ani_queue.length == 0) {
+			that.animating = false;
+			callback();
+			return;
 		}else if (that.player_ani_queue[0]() == false) {
 			that.player_ani_queue.shift();
 		}
@@ -267,9 +313,9 @@ RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
 		}
 		// block hit
 		var fade = 2.0 / anistep;
-		var pad = -0.5 + (w * (anistep / (steps * 2)));
+		var pad = -0.5 + (w * (anistep / (steps * 3)));
 		that.ctx.fillStyle = "rgba(200,0,0,"+ fade +")";
-		that.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+		that.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - (pad * 2), w - (pad * 2));
 		// shot trace
 		that.ctx.strokeStyle = "rgba(255,263,33,"+ fade +")";
 		that.ctx.linewidth = 9;
@@ -483,6 +529,7 @@ RushNCrush.prototype.draw_ui = function() {
 	var box_size = 12;
 	var pad = 4;
 
+	// Moves and Current Turn
 	this.ctx.fillStyle = this.team_color[this.user_turn];
 	this.ctx.strokeStyle = "#000";
 	this.ctx.lineWidth = 1;
@@ -494,11 +541,36 @@ RushNCrush.prototype.draw_ui = function() {
 	for (var i=0; i<=num_boxes; i++) {
 		var x = pad;
 		var y = (i * (pad + box_size)) + pad;
-
 		this.ctx.fillRect(x,y, box_size,box_size);
 		if (i == 0) {
 			this.ctx.strokeRect(x - pad/2,y - pad/2, box_size + pad, box_size + pad);
 		}
+	}
+	// Weapons
+	if (this.player_index < 0) {
+		return;
+	}
+	this.ctx.fillStyle = "#FFF";
+	this.ctx.font = "12px Verdana";
+	var box_size = 2 * this.ctx.measureText("M").width;
+	for (var i=0; i<this.players[this.player_index].weapons.length; i++) {
+		var text = this.players[this.player_index].weapons[i].name +" :"+ (i+1);
+		var w = this.ctx.measureText(text).width + (2 * pad);
+		var x = this.canvas.width - (pad + w);
+		var y = (i * (pad + box_size)) + pad;
+		this.ctx.fillStyle = "#FFF";
+		this.ctx.fillRect(x, y, w, box_size);
+
+		var wi = this.players[this.player_index].selected_weapon
+		if (wi == undefined) {
+			wi = 0;
+		}
+		if (i == wi) {
+			this.ctx.strokeRect(x - pad/2,y - pad/2, w + pad, box_size + pad);
+		}
+
+		this.ctx.fillStyle = "#000";
+		this.ctx.fillText(text, x + pad, y + (box_size * 0.75));
 	}
 }
 

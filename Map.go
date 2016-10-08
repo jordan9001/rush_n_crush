@@ -72,7 +72,7 @@ func getRandomPosition(gv *GameVariables) Position {
 	for i := 0; i < 100; i++ {
 		x := rand.Intn(len(gv.GameMap[0]) - 1)
 		y := rand.Intn(len(gv.GameMap) - 1)
-		if gv.GameMap[y][x].tType == T_WALK {
+		if gv.GameMap[y][x].tType == T_WALK && gv.GameMap[y][x].occupied == false {
 			return Position{x: int16(x), y: int16(y)}
 		}
 	}
