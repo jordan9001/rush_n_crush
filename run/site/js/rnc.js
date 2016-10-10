@@ -165,7 +165,7 @@ RushNCrush.prototype.move_player = function(dx, dy) {
 };
 
 RushNCrush.prototype.next_player = function() {
-	for (var i=1; i<this.players.length; i++) {
+	for (var i=1; i<=this.players.length; i++) {
 		if (this.players[(this.player_index + i) % this.players.length].owner == this.userid) {
 			this.player_index = (this.player_index + i) % this.players.length;
 			this.focux = this.players[this.player_index].pos.x;
