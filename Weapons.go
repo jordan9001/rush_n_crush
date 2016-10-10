@@ -16,6 +16,7 @@ type Weapon struct {
 	ammo             int16
 	movesCost        int8
 	distance         int16
+	clientsFlag      int
 }
 
 func (w Weapon) makeCopy() (r Weapon) {
@@ -115,7 +116,7 @@ func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32
 
 func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
 	// Add some random to the shots
-	rand_max := 24
+	rand_max := 18
 	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 	// ray trace till we hit something
 	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, false, gv)
@@ -185,6 +186,7 @@ var pistol Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        4,
 	distance:         64,
+	clientsFlag:      -1,
 }
 
 var shovel Weapon = Weapon{
@@ -196,15 +198,29 @@ var shovel Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        3,
 	distance:         1,
+	clientsFlag:      -1,
 }
 
 var bazooka Weapon = Weapon{
 	name:             "bazooka",
 	damage:           damageExplosion,
-	playerDamageMult: 50,
-	tileDamageMult:   75,
+	playerDamageMult: 80,
+	tileDamageMult:   80,
 	damageType:       "explosion",
 	ammo:             3,
 	movesCost:        11,
 	distance:         45,
+	clientsFlag:      -1,
+}
+
+var flag Weapon = Weapon{
+	name:             "flag",
+	damage:           damageMelee,
+	playerDamageMult: 0,
+	tileDamageMult:   100,
+	damageType:       "melee",
+	ammo:             -1,
+	movesCost:        2,
+	distance:         1,
+	clientsFlag:      -1,
 }

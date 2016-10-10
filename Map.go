@@ -11,15 +11,16 @@ import (
 )
 
 const (
-	T_EMPTY  int8 = 1
-	T_SWALL  int8 = 2
-	T_WWALL  int8 = 3
-	T_SLOWV  int8 = 4
-	T_SLOWH  int8 = 5
-	T_WLOWV  int8 = 6
-	T_WLOWH  int8 = 7
-	T_WALK   int8 = 8
-	T_BUTTON int8 = 9
+	T_EMPTY int8 = 1
+	T_SWALL int8 = 2
+	T_WWALL int8 = 3
+	T_SLOWV int8 = 4
+	T_SLOWH int8 = 5
+	T_WLOWV int8 = 6
+	T_WLOWH int8 = 7
+	T_WALK  int8 = 8
+	T_SPAWN int8 = 9
+	T_FLAG  int8 = 10
 )
 const (
 	T_SWALL_H int16 = 100
@@ -68,14 +69,54 @@ func (t Tile) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type Spawn struct {
+	pos    Position
+	client int
+}
+
+func getPositionClose(x, y int16, gv *GameVariables) Position {
+	// try spot
+	if gv.GameMap[y][x].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+		return Position{x: x, y: y}
+	}
+	var tx, ty, i int16
+	for i = 1; i < 100; i++ {
+		// Do x extremes
+		for tx = x - i; tx < x+i; tx++ {
+			ty = y - i
+			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+				return Position{x: tx, y: ty}
+			}
+			ty = y + i
+			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+				return Position{x: tx, y: ty}
+			}
+		}
+		// Do y extremes
+		for ty = y - (i - 1); ty < y+(i-1); ty++ {
+			tx = x - i
+			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+				return Position{x: tx, y: ty}
+			}
+			tx = x + i
+			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+				return Position{x: tx, y: ty}
+			}
+		}
+	}
+	fmt.Printf("Error, could not get position\n")
+	return Position{x: -1, y: -1}
+}
+
 func getRandomPosition(gv *GameVariables) Position {
 	for i := 0; i < 100; i++ {
 		x := rand.Intn(len(gv.GameMap[0]) - 1)
 		y := rand.Intn(len(gv.GameMap) - 1)
-		if gv.GameMap[y][x].tType == T_WALK && gv.GameMap[y][x].occupied == false {
+		if gv.GameMap[y][x].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
 			return Position{x: int16(x), y: int16(y)}
 		}
 	}
+	fmt.Printf("Error, could not get position\n")
 	return Position{x: -1, y: -1}
 }
 
@@ -137,14 +178,15 @@ func LoadMap(map_args string, gv *GameVariables) error {
 			} else if tile.tType == T_WLOWV || tile.tType == T_WLOWH {
 				tile.nextType = T_WALK
 				tile.health = T_WLOW_H
+			} else if tile.tType == T_SPAWN {
+				// add a spawn
 			}
 			tile.occupied = false
 			row[j] = tile
-			fmt.Printf("%d", t)
 		}
-		fmt.Printf("\n")
 		gv.GameMap[i] = row
 	}
+	printAsciiMap(gv.GameMap)
 	return nil
 }
 
@@ -238,4 +280,33 @@ func trace(px, py, x, y int16, chanceCoverBlock bool, stopBeforeHit bool, gv *Ga
 		return prevx, prevy
 	}
 	return sx, sy
+}
+
+func printAsciiMap(gm [][]Tile) {
+	for y := 0; y < len(gm); y++ {
+		for x := 0; x < len(gm[0]); x++ {
+			if gm[y][x].tType == T_EMPTY {
+				fmt.Printf("#")
+			} else if gm[y][x].tType == T_SWALL {
+				fmt.Printf("8")
+			} else if gm[y][x].tType == T_WWALL {
+				fmt.Printf("6")
+			} else if gm[y][x].tType == T_SLOWV {
+				fmt.Printf("|")
+			} else if gm[y][x].tType == T_SLOWH {
+				fmt.Printf("-")
+			} else if gm[y][x].tType == T_WLOWV {
+				fmt.Printf(";")
+			} else if gm[y][x].tType == T_WLOWH {
+				fmt.Printf("~")
+			} else if gm[y][x].tType == T_WALK {
+				fmt.Printf(" ")
+			} else if gm[y][x].tType == T_SPAWN {
+				fmt.Printf("+")
+			} else if gm[y][x].tType == T_FLAG {
+				fmt.Printf("*")
+			}
+		}
+		fmt.Printf("\n")
+	}
 }

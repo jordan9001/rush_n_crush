@@ -51,13 +51,26 @@ func (p Player) MarshalJSON() ([]byte, error) {
 }
 
 func AddPlayers(client int, gv *GameVariables) {
+	var spawnx int16 = -1
+	var spawny int16 = -1
+	for i := 0; i < len(gv.Spawns); i++ {
+		if gv.Spawns[i].client == client {
+			spawnx = gv.Spawns[i].pos.x
+			spawny = gv.Spawns[i].pos.y
+			break
+		}
+	}
 	for i := 0; i < int(gv.playersPerClient); i++ {
 		var p Player
 		p.id = gv.currentPlayerCount
 		gv.currentPlayerCount++
 		p.owner = client
-		// TODO: Spawn locations
-		p.pos = getRandomPosition(gv)
+		// if this client has a spawn, add there, otherwise add randomly
+		if spawnx >= 0 {
+			p.pos = getPositionClose(spawnx, spawny, gv)
+		} else {
+			p.pos = getRandomPosition(gv)
+		}
 		p.moves = 0
 		p.health = gv.defaultPlayerHealth
 		p.maxHealth = p.health
@@ -114,7 +127,7 @@ func MovePlayer(arg_string string, id int, u *UpdateGroup, gv *GameVariables) er
 	if newx >= int16(len(gv.GameMap[0])) || newx < 0 || newy >= int16(len(gv.GameMap)) || newy < 0 {
 		return errors.New("Out of Bounds")
 	}
-	if gv.GameMap[newy][newx].tType != T_WALK || gv.GameMap[newy][newx].occupied {
+	if gv.GameMap[newy][newx].tType < T_WALK || gv.GameMap[newy][newx].occupied {
 		return errors.New("Unmovable Tile")
 	}
 
@@ -265,7 +278,10 @@ func makePlayerUpdates(client int, gv *GameVariables) map[int8]Player {
 	playerUpdates := make(map[int8]Player)
 	// for each of this clients players
 	for cp := 0; cp < len(gv.GamePlayers); cp++ {
-		if gv.GamePlayers[cp].owner == client {
+		if client == -1 {
+			// observer, just add all
+			playerUpdates[gv.GamePlayers[cp].id] = gv.GamePlayers[cp]
+		} else if gv.GamePlayers[cp].owner == client {
 			// add it to the map
 			playerUpdates[gv.GamePlayers[cp].id] = gv.GamePlayers[cp]
 			x := gv.GamePlayers[cp].pos.x

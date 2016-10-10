@@ -89,6 +89,7 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 type GameVariables struct {
 	GameNumber          int
 	GameMap             [][]Tile
+	Spawns              []Spawn
 	GamePlayers         []Player
 	currentPlayerCount  int8
 	movesPerPlayer      int8
@@ -210,17 +211,24 @@ func processCommand(id int, message string, gv *GameVariables) error {
 }
 
 func updateClients(u UpdateGroup, gv *GameVariables) error {
-	for _, currentClient := range Clients {
+	var client_u UpdateGroup
+	for i, currentClient := range Clients {
 		if currentClient.GameNumber != gv.GameNumber {
 			continue
 		}
-		client_u := UpdateGroup{
+		// if the player has had everyone die, still show them whats happening
+		client_u = UpdateGroup{
 			YourId:      currentClient.Id,
 			ClientTurn:  gv.ClientTurn,
 			TileUpdates: u.TileUpdates,
 			WeaponHits:  u.WeaponHits,
 		}
-		client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id, gv)
+		// if the player has had everyone die, still show them whats happening
+		if getNumberPlayers(i, gv) > 0 {
+			client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id, gv)
+		} else if gv.turnNumber > 1 {
+			client_u.PlayerUpdates = makePlayerUpdates(-1, gv)
+		}
 		// Send the data
 		data, _ := client_u.MarshalJSON()
 		fmt.Printf("%d sees %q\n\n", currentClient.Id, data)
@@ -252,6 +260,7 @@ func updateTurn(gv *GameVariables) {
 		fmt.Printf("\tTurn : %d\n", gv.turnNumber)
 		// Give the next client moves
 		giveClientMoves(gv.ClientTurn, gv)
+		// add powerups
 	}
 }
 

@@ -16,6 +16,7 @@ function RushNCrush(url, canvas_id) {
 	// users
 	this.userid = undefined;
 	this.user_turn = undefined;
+	this.ingame = false;
 	
 	// game objects
 	this.players = [];
@@ -55,23 +56,31 @@ function RushNCrush(url, canvas_id) {
 		
 	});
 	document.addEventListener('keydown', function(evt) {
+		var ret_code = true;
 		if (evt.keyCode == 65 || evt.keyCode == 37) {
+			ret_code = false;
 			that.move_player(-1,0);
 		} else if (evt.keyCode == 68 || evt.keyCode == 39) {
+			ret_code = false;
 			that.move_player(1,0);
 		} else if (evt.keyCode == 87 || evt.keyCode == 38) {
+			ret_code = false;
 			that.move_player(0,-1);
 		} else if (evt.keyCode == 83 || evt.keyCode == 40) {
+			ret_code = false;
 			that.move_player(0,1);
 		} else if (evt.keyCode == 32) {
+			ret_code = false;
 			that.next_player();
 		} else if (evt.keyCode == 13) {
+			ret_code = false;
 			that.end_turn();
 		} else if (evt.keyCode <= 57 && evt.keyCode >= 49) {
+			ret_code = false;
 			that.choose_weapon(evt.keyCode - 49);
 		}
-		evt.returnValue = false;
-		return false
+		evt.returnValue = ret_code;
+		return ret_code;
 	});
 }
 
@@ -183,9 +192,13 @@ RushNCrush.prototype.update_game = function(data) {
 	if (this.player_index > -1) {
 		focusid = this.players[this.player_index].id;
 	}
+	var has_players = false;
 	for (var p=0; p<this.players.length; p++) {
 		p_updated = false;
 		for (var i=0; i<u_p.length; i++) {
+			if (u_p[i].owner == this.userid) {
+				has_players = true;
+			}
 			if (u_p[i].id == this.players[p].id) {
 				// if the player moved, animate it
 				if (this.players[p].pos.x != u_p[i].pos.x || this.players[p].pos.y != u_p[i].pos.y) {
@@ -224,6 +237,7 @@ RushNCrush.prototype.update_game = function(data) {
 			p--;
 		}
 	}
+	this.ingame = has_players;
 	// if there are extras left over, add them
 	for (var i=0; i<u_p.length; i++) {
 		this.players.push(u_p[i]);
@@ -396,7 +410,7 @@ RushNCrush.prototype.draw = function(cast) {
 	}
 	// Clear
 	this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
+	
 	if (cast) {
 		this.ray_cast_clear();
 		// Mark things for Shadow
@@ -516,7 +530,7 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	if (no_draw == false) {
 		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
 	}
-	if (!tile_obj.lit) {
+	if (!tile_obj.lit && this.ingame) {
 		this.ctx.fillStyle = "rgba(0,0,0,0.15)";
 		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
 	}
