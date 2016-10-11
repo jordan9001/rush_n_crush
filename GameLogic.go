@@ -124,10 +124,16 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		// From the lobby they can change map, change number of clients, change game type, etc
 		// TODO
 		// Till then, just add to the game
-		c := Clients[id]
-		c.GameNumber = gv.GameNumber
-		Clients[id] = c
+		// TODO make sure they only call this once
+		fmt.Printf("Sending gamestate to client %d\n", id)
 		gv.ClientsInGame++
+		// see if we have a spawn for them
+		for i := 0; i < len(gv.Spawns); i++ {
+			if gv.Spawns[i].client < 0 {
+				gv.Spawns[i].client = id
+				break
+			}
+		}
 		// They need to be sent the map
 		SendMap(id, gv)
 		// After sending, add in players for them
@@ -343,7 +349,8 @@ func StartGame(startup_path string) (int, error) {
 	c := make(chan command)
 	con_read[gv.GameNumber] = c
 	// Make our map of players
-	gv.GamePlayers = make([]Player, 0, 32)
+	gv.GamePlayers = make([]Player, 0, int(gv.playersPerClient)*gv.ClientsForGame)
+	gv.Spawns = make([]Spawn, 0, gv.ClientsForGame)
 
 	// run default commands from file
 	if len(startup_path) > 0 {

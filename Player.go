@@ -68,6 +68,7 @@ func AddPlayers(client int, gv *GameVariables) {
 		// if this client has a spawn, add there, otherwise add randomly
 		if spawnx >= 0 {
 			p.pos = getPositionClose(spawnx, spawny, gv)
+			fmt.Printf("Spawn %d,%d, close %d,%d\n", spawnx, spawny, p.pos.x, p.pos.y)
 		} else {
 			p.pos = getRandomPosition(gv)
 		}

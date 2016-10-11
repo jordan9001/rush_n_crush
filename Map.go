@@ -74,32 +74,57 @@ type Spawn struct {
 	client int
 }
 
+func isInBounds(x, y int16, gv *GameVariables) bool {
+	if x < 0 || x >= int16(len(gv.GameMap[0])) {
+		return false
+	}
+	if y < 0 || y >= int16(len(gv.GameMap)) {
+		return false
+	}
+	return true
+}
+
+func isWalkable(x, y int16, gv *GameVariables) bool {
+	if !isInBounds(x, y, gv) {
+		fmt.Printf("\t%d,%d is out of bounds\n", x, y)
+		return false
+	} else if gv.GameMap[y][x].tType < T_WALK {
+		fmt.Printf("\t%d,%d is type %d\n", x, y, gv.GameMap[y][x].tType)
+		return false
+	} else if gv.GameMap[y][x].occupied == true {
+		fmt.Printf("\t%d,%d is occupied\n", x, y)
+		return false
+	}
+	fmt.Printf("\t%d,%d is empty\n", x, y)
+	return true
+}
+
 func getPositionClose(x, y int16, gv *GameVariables) Position {
 	// try spot
 	if gv.GameMap[y][x].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
 		return Position{x: x, y: y}
 	}
 	var tx, ty, i int16
-	for i = 1; i < 100; i++ {
+	for i = 1; i < 4; i++ {
 		// Do x extremes
 		for tx = x - i; tx < x+i; tx++ {
 			ty = y - i
-			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+			if isWalkable(tx, ty, gv) {
 				return Position{x: tx, y: ty}
 			}
 			ty = y + i
-			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+			if isWalkable(tx, ty, gv) {
 				return Position{x: tx, y: ty}
 			}
 		}
 		// Do y extremes
 		for ty = y - (i - 1); ty < y+(i-1); ty++ {
 			tx = x - i
-			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+			if isWalkable(tx, ty, gv) {
 				return Position{x: tx, y: ty}
 			}
 			tx = x + i
-			if gv.GameMap[ty][tx].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
+			if isWalkable(tx, ty, gv) {
 				return Position{x: tx, y: ty}
 			}
 		}
@@ -110,10 +135,10 @@ func getPositionClose(x, y int16, gv *GameVariables) Position {
 
 func getRandomPosition(gv *GameVariables) Position {
 	for i := 0; i < 100; i++ {
-		x := rand.Intn(len(gv.GameMap[0]) - 1)
-		y := rand.Intn(len(gv.GameMap) - 1)
-		if gv.GameMap[y][x].tType >= T_WALK && gv.GameMap[y][x].occupied == false {
-			return Position{x: int16(x), y: int16(y)}
+		x := int16(rand.Intn(len(gv.GameMap[0]) - 1))
+		y := int16(rand.Intn(len(gv.GameMap) - 1))
+		if isWalkable(x, y, gv) {
+			return Position{x: x, y: y}
 		}
 	}
 	fmt.Printf("Error, could not get position\n")
@@ -180,6 +205,11 @@ func LoadMap(map_args string, gv *GameVariables) error {
 				tile.health = T_WLOW_H
 			} else if tile.tType == T_SPAWN {
 				// add a spawn
+				new_spawn := Spawn{
+					pos:    Position{x: j, y: i},
+					client: -1,
+				}
+				gv.Spawns = append(gv.Spawns, new_spawn)
 			}
 			tile.occupied = false
 			row[j] = tile

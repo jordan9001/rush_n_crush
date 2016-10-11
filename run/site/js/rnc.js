@@ -156,7 +156,7 @@ RushNCrush.prototype.move_player = function(dx, dy) {
 		return;
 	}
 	p = 0;
-	if (this.map[this.players[i].pos.y + dy][this.players[i].pos.x + dx].tType != 8) {
+	if (this.map[this.players[i].pos.y + dy][this.players[i].pos.x + dx].tType < 8) {
 		return;
 	}
 	// send the move
@@ -520,8 +520,7 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 		// Walkable tile
 	case 9:
 		no_draw = true;
-		// Button
-		break;
+		// Spawn
 	}
 	
 	var topl = this.coord2px(x,y);
@@ -611,12 +610,12 @@ RushNCrush.prototype.ray_cast_clear = function() {
 }
 
 RushNCrush.prototype.ray_cast_start = function(origin_x, origin_y) {
-	num_cast = 128;
+	num_cast = 256;
 	for (var i=0; i<num_cast; i++) {
 		var sin = Math.sin(Math.PI * 2 * (i / num_cast));
 		var cos = Math.cos(Math.PI * 2 * (i / num_cast));
-		var ex = cos * 20;
-		var ey = sin * 20;
+		var ex = cos * 60;
+		var ey = sin * 60;
 		this.ray_cast(origin_x, origin_y, ex + origin_x, ey + origin_y);
 	}	
 }
@@ -638,6 +637,14 @@ RushNCrush.prototype.ray_cast = function(px, py, ex, ey) {
 	for (; n >= 0; n--) {
 		if (sx < 0 || sx >= this.mapw || sy < 0 || sy >= this.maph) {
 			return;
+		}
+		if (sx != px || sy != py) {
+			for (var i=0; i<this.players.length; i++) {
+				if (sx == this.players[i].pos.x && sy == this.players[i].pos.y) {
+					console.log("Hit a guy");
+					return;
+				}
+			}
 		}
 		this.map[sy][sx].lit = true;
 		tt = this.map[sy][sx].tType;
