@@ -21,6 +21,9 @@ const (
 	T_WALK  int8 = 8
 	T_SPAWN int8 = 9
 	T_FLAG  int8 = 10
+	T_PUP0  int8 = 11 // lowest value powerups
+	T_PUP1  int8 = 12
+	T_PUP2  int8 = 13 // highest value powerups
 )
 const (
 	T_SWALL_H int16 = 100

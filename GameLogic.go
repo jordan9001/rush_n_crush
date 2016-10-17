@@ -99,6 +99,12 @@ type GameVariables struct {
 	ClientsInGame       int
 	ClientTurn          int
 	turnNumber          int
+	pup0Weapons         WeaponCache // powerup spawn type 0 weapons, lowest value
+	pup0Wait            int
+	pup1Weapons         WeaponCache
+	pup1Wait            int
+	pup2Weapons         WeaponCache
+	pup2Wait            int
 }
 
 // The syntax is command:comma,separated,args

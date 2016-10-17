@@ -38,7 +38,7 @@ function RushNCrush(url, canvas_id) {
 	this.canvas.addEventListener('wheel', function(evt){
 		that.zoom += evt.deltaY / 30;
 		if (that.zoom <= 1) {
-			that.zoom = 1;
+			that.zoom = 1
 		}
 		that.draw(true);
 		evt.returnValue = false;
@@ -526,9 +526,15 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	var topl = this.coord2px(x,y);
 	var w = this.zoom;
 	var pad = -0.5;
+	// Draw tile
 	if (no_draw == false) {
 		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
 	}
+	// Draw powerups
+	if (tile_obj.powerups.length > 0) {
+		this.draw_powerup(x, y);
+	}
+	// Draw shadow
 	if (!tile_obj.lit && this.ingame) {
 		this.ctx.fillStyle = "rgba(0,0,0,0.15)";
 		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
@@ -539,6 +545,22 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	//this.ctx.font="8px";
 	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
+
+RushNCrush.prototype.draw_powerup = function(x, y) {
+	this.ctx.fillStyle = "#ff0";
+	var rad = this.zoom * 0.4;
+	var center = this.coord2px(x + 0.5, y + 0.5);
+	this.ctx.beginPath();
+	this.ctx.moveTo(center[0], center[1] - rad);
+	var spikes = 5;
+	var angstep = 4 * Math.PI / spikes;
+	for (var i=0; i < spikes; i++) {
+		var dx = Math.sin(angstep * i) * rad;
+		var dy = Math.cos(angstep * i) * rad;
+		this.ctx.pathTo(center[0] - dx, center[1] - dy);
+	}
+		
+}
 
 RushNCrush.prototype.draw_ui = function() {
 	// Draw current Turn
@@ -572,13 +594,13 @@ RushNCrush.prototype.draw_ui = function() {
 	var text_height = this.ctx.measureText("M").width;
 	var box_size = 2 * text_height;
 	for (var i=0; i<this.players[this.player_index].weapons.length; i++) {
-		var text = this.players[this.player_index].weapons[i].name +" :"+ (i+1);
+		var ammo = this.players[this.player_index].weapons[i].ammo;
+		var move_cost = this.players[this.player_index].weapons[i].move_cost;
+		var text = this.players[this.player_index].weapons[i].name +" : "+ move_cost +" : "+ ((ammo >= 0)?ammo:String.fromCharCode(8734));
 		var w = this.ctx.measureText(text).width + (2 * pad);
 		var x = this.canvas.width - (pad + w);
 		var y = (i * (pad + box_size)) + pad;
 		this.ctx.fillStyle = "#FFF";
-		var ammo = this.players[this.player_index].weapons[i].ammo;
-		var move_cost = this.players[this.player_index].weapons[i].move_cost;
 		if (ammo == 0 || player_moves < move_cost) {
 			this.ctx.fillStyle = "#999"
 		}
@@ -641,7 +663,6 @@ RushNCrush.prototype.ray_cast = function(px, py, ex, ey) {
 		if (sx != px || sy != py) {
 			for (var i=0; i<this.players.length; i++) {
 				if (sx == this.players[i].pos.x && sy == this.players[i].pos.y) {
-					console.log("Hit a guy");
 					return;
 				}
 			}
