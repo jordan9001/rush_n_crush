@@ -177,17 +177,15 @@ func MovePlayer(arg_string string, id int, u *UpdateGroup, gv *GameVariables) er
 	gv.GamePlayers[p].moves -= 1
 
 	// Check if there are powerups
-	got_powerups := false
-	for i := 0; i < len(gv.GameMap[newy][newx].powerups); i++ {
-		gv.GamePlayers[p].weapons = gv.GamePlayers[p].weapons.add(gv.GameMap[newy][newx].powerups[i])
-		got_powerups = true
+	if pu, ok := getPowerup(newx, newy, gv); ok {
+		if len(pu.weapons) > 0 {
+			for i := 0; i < len(pu.weapons); i++ {
+				gv.GamePlayers[p].weapons = gv.GamePlayers[p].weapons.add(pu.weapons[i])
+			}
+			pu.weapons = pu.weapons[:0]
+		}
 	}
-	if got_powerups {
-		// remove the cache
-		gv.GameMap[newy][newx].powerups = nil
-		// update the tile
-		u.TileUpdates = append(u.TileUpdates, gv.GameMap[newy][newx])
-	}
+
 	return nil
 }
 
@@ -275,12 +273,21 @@ func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) {
 	}
 }
 
-func makePlayerUpdates(client int, gv *GameVariables) map[int8]Player {
+func makePlayerUpdates(client int, gv *GameVariables) (map[int8]Player, map[int32]PowerUp) {
 	playerUpdates := make(map[int8]Player)
+	powerUpdates := make(map[int32]PowerUp)
 	// for each of this clients players
+	if client == -1 {
+		// powerups
+		for pu := 0; pu < len(gv.PowerUps); pu++ {
+			id := gv.PowerUps[pu].getId()
+			powerUpdates[id] = gv.PowerUps[pu]
+		}
+	}
 	for cp := 0; cp < len(gv.GamePlayers); cp++ {
 		if client == -1 {
 			// observer, just add all
+			// players
 			playerUpdates[gv.GamePlayers[cp].id] = gv.GamePlayers[cp]
 		} else if gv.GamePlayers[cp].owner == client {
 			// add it to the map
@@ -288,17 +295,33 @@ func makePlayerUpdates(client int, gv *GameVariables) map[int8]Player {
 			x := gv.GamePlayers[cp].pos.x
 			y := gv.GamePlayers[cp].pos.y
 			// add everything it can see
+			// players
 			for o := 0; o < len(gv.GamePlayers); o++ {
 				if gv.GamePlayers[o].owner != client {
-					sx, sy := trace(x, y, gv.GamePlayers[o].pos.x, gv.GamePlayers[o].pos.y, false, false, gv)
-					if sx == gv.GamePlayers[o].pos.x && sy == gv.GamePlayers[o].pos.y {
-						playerUpdates[gv.GamePlayers[o].id] = gv.GamePlayers[o]
+					if _, ok := playerUpdates[gv.GamePlayers[o].id]; !ok {
+						sx, sy := trace(x, y, gv.GamePlayers[o].pos.x, gv.GamePlayers[o].pos.y, false, false, gv)
+						if sx == gv.GamePlayers[o].pos.x && sy == gv.GamePlayers[o].pos.y {
+							playerUpdates[gv.GamePlayers[o].id] = gv.GamePlayers[o]
+						}
+					}
+				}
+			}
+			// powerups
+			for pu := 0; pu < len(gv.PowerUps); pu++ {
+				if len(gv.PowerUps[pu].weapons) == 0 {
+					continue
+				}
+				id := gv.PowerUps[pu].getId()
+				if _, ok := powerUpdates[id]; !ok {
+					sx, sy := trace(x, y, gv.PowerUps[pu].pos.x, gv.PowerUps[pu].pos.y, false, false, gv)
+					if sx == gv.PowerUps[pu].pos.x && sy == gv.PowerUps[pu].pos.y {
+						powerUpdates[id] = gv.PowerUps[pu]
 					}
 				}
 			}
 		}
 	}
-	return playerUpdates
+	return playerUpdates, powerUpdates
 }
 
 func getNumberPlayers(id int, gv *GameVariables) int8 {

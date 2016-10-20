@@ -21,7 +21,7 @@ function RushNCrush(url, canvas_id) {
 	// game objects
 	this.players = [];
 	this.team_color = ["#03c", "#c00", "#60c", "#093", "#0cc", "#fc0"]; // 6 starter color, we will randomly add more as needed (only multiples of 3)
-	this.objects = [];
+	this.powerups = [];
 
 	this.animating = false;
 	this.player_ani_queue = [];
@@ -179,75 +179,80 @@ RushNCrush.prototype.next_player = function() {
 RushNCrush.prototype.update_game = function(data) {
 	this.userid = data.your_id;
 	this.user_turn = data.current_turn;
+	// update tiles
 	var u_t = data.updated_tiles;
 	for (var i=0; i<u_t.length; i++) {
 		this.map[u_t[i].pos.y][u_t[i].pos.x] = u_t[i];
 	}
+	// update players
 	var u_p = data.updated_players;
-	if (u_p.length == 0) {
-		return true;
-	}
-	// for every player, if updated, cool, if not, ditch 'em
-	var focusid = -1;
-	if (this.player_index > -1) {
-		focusid = this.players[this.player_index].id;
-	}
-	var has_players = false;
-	for (var p=0; p<this.players.length; p++) {
-		p_updated = false;
-		for (var i=0; i<u_p.length; i++) {
-			if (u_p[i].owner == this.userid) {
-				has_players = true;
-			}
-			if (u_p[i].id == this.players[p].id) {
-				// if the player moved, animate it
-				if (this.players[p].pos.x != u_p[i].pos.x || this.players[p].pos.y != u_p[i].pos.y) {
-					// queue for animation
-					this.player_animate(p, this.players[p].pos.x, this.players[p].pos.y, u_p[i].pos.x, u_p[i].pos.y);
-				}
-				// if we are focusing on this player already, keep the focus
-				if (p == this.player_index) {
-					this.focux = u_p[i].pos.x;
-					this.focuy = u_p[i].pos.y;
-				}
-				// keep the correct weapon selected
-				var selected_weapon = this.players[p].selected_weapon;
-				// remove this from our updated array, and break
-				this.players[p] = u_p.splice(i,1)[0];
-				this.players[p].selected_weapon = selected_weapon;
-				p_updated = true;
-				break;
-			}
+	if (u_p.length != 0) {
+		// for every player, if updated, cool, if not, ditch 'em
+		var focusid = -1;
+		if (this.player_index > -1) {
+			focusid = this.players[this.player_index].id;
 		}
-		if (!p_updated) {
-			// remove the player, and adjust
-			this.players.splice(p,1);
-			// reset focus
-			this.player_index = -1;
-			if (focusid >= 0) {
-				for (var np=0; np < this.players.length; np++) {
-					if (this.players[np].id == focusid) {
-						this.focux = this.players[np].pos.x;
-						this.focuy = this.players[np].pos.y;
-						this.player_index = np;
-						break;
+		var has_players = false;
+		for (var p=0; p<this.players.length; p++) {
+			p_updated = false;
+			for (var i=0; i<u_p.length; i++) {
+				if (u_p[i].owner == this.userid) {
+					has_players = true;
+				}
+				if (u_p[i].id == this.players[p].id) {
+					// if the player moved, animate it
+					if (this.players[p].pos.x != u_p[i].pos.x || this.players[p].pos.y != u_p[i].pos.y) {
+						// queue for animation
+						this.player_animate(p, this.players[p].pos.x, this.players[p].pos.y, u_p[i].pos.x, u_p[i].pos.y);
+					}
+					// if we are focusing on this player already, keep the focus
+					if (p == this.player_index) {
+						this.focux = u_p[i].pos.x;
+						this.focuy = u_p[i].pos.y;
+					}
+					// keep the correct weapon selected
+					var selected_weapon = this.players[p].selected_weapon;
+					// remove this from our updated array, and break
+					this.players[p] = u_p.splice(i,1)[0];
+					this.players[p].selected_weapon = selected_weapon;
+					p_updated = true;
+					break;
+				}
+			}
+			if (!p_updated) {
+				// remove the player, and adjust
+				this.players.splice(p,1);
+				// reset focus
+				this.player_index = -1;
+				if (focusid >= 0) {
+					for (var np=0; np < this.players.length; np++) {
+						if (this.players[np].id == focusid) {
+							this.focux = this.players[np].pos.x;
+							this.focuy = this.players[np].pos.y;
+							this.player_index = np;
+							break;
+						}
 					}
 				}
+				p--;
 			}
-			p--;
+		}
+		this.ingame = has_players;
+		// if there are extras left over, add them
+		for (var i=0; i<u_p.length; i++) {
+			this.players.push(u_p[i]);
+			if (u_p[i].owner == this.userid && this.player_index < 0) {
+				// focus on the new player
+				this.focux = u_p[i].pos.x;
+				this.focuy = u_p[i].pos.y;
+				this.player_index = this.players.length - 1;
+			}
 		}
 	}
-	this.ingame = has_players;
-	// if there are extras left over, add them
-	for (var i=0; i<u_p.length; i++) {
-		this.players.push(u_p[i]);
-		if (u_p[i].owner == this.userid && this.player_index < 0) {
-			// focus on the new player
-			this.focux = u_p[i].pos.x;
-			this.focuy = u_p[i].pos.y;
-			this.player_index = this.players.length - 1;
-		}
-	}
+	// handle powerups
+	this.powerups = data.powerups;
+	console.log(this.powerups);
+
 	// handle hit tiles
 	var h_t = data.hit_tiles;
 	for (var i=0; i<h_t.length; i++) {
@@ -428,6 +433,11 @@ RushNCrush.prototype.draw = function(cast) {
 		}
 	}
 
+	// Draw powerups
+	for (var i=0; i<this.powerups.length; i++) {
+		this.draw_powerup(this.powerups[i]);
+	}
+
 	// Draw the players
 	for (var i=0; i<this.players.length; i++) {
 		this.draw_player(this.players[i]);
@@ -518,9 +528,6 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	case 8:
 		no_draw = true;
 		// Walkable tile
-	case 9:
-		no_draw = true;
-		// Spawn
 	}
 	
 	var topl = this.coord2px(x,y);
@@ -529,10 +536,6 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	// Draw tile
 	if (no_draw == false) {
 		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
-	}
-	// Draw powerups
-	if (tile_obj.powerups.length > 0) {
-		this.draw_powerup(x, y);
 	}
 	// Draw shadow
 	if (!tile_obj.lit && this.ingame) {
@@ -546,8 +549,10 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
 
-RushNCrush.prototype.draw_powerup = function(x, y) {
-	this.ctx.fillStyle = "#ff0";
+RushNCrush.prototype.draw_powerup = function(powerup) {
+	var x = powerup.pos.x;
+	var y = powerup.pos.y;
+	this.ctx.fillStyle = "#fff200";
 	var rad = this.zoom * 0.4;
 	var center = this.coord2px(x + 0.5, y + 0.5);
 	this.ctx.beginPath();
@@ -557,9 +562,9 @@ RushNCrush.prototype.draw_powerup = function(x, y) {
 	for (var i=0; i < spikes; i++) {
 		var dx = Math.sin(angstep * i) * rad;
 		var dy = Math.cos(angstep * i) * rad;
-		this.ctx.pathTo(center[0] - dx, center[1] - dy);
+		this.ctx.lineTo(center[0] - dx, center[1] - dy);
 	}
-		
+	this.ctx.fill();
 }
 
 RushNCrush.prototype.draw_ui = function() {

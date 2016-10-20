@@ -43,6 +43,7 @@ type UpdateGroup struct {
 	ClientTurn    int
 	TileUpdates   []Tile
 	PlayerUpdates map[int8]Player
+	PowerUpdates  map[int32]PowerUp // mapped by ((pos.x << 16) & (pos.y))
 	WeaponHits    []HitInfo
 }
 
@@ -72,6 +73,16 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 		buf.Write(playerJSON)
 		first = false
 	}
+	buf.WriteString("],\"powerups\":[")
+	first = true
+	for _, v := range u.PowerUpdates {
+		if !first {
+			buf.WriteString(",")
+		}
+		puJSON, _ := v.MarshalJSON()
+		buf.Write(puJSON)
+		first = false
+	}
 	buf.WriteString("],\"hit_tiles\":[")
 	first = true
 	for _, v := range u.WeaponHits {
@@ -99,12 +110,13 @@ type GameVariables struct {
 	ClientsInGame       int
 	ClientTurn          int
 	turnNumber          int
-	pup0Weapons         WeaponCache // powerup spawn type 0 weapons, lowest value
-	pup0Wait            int
-	pup1Weapons         WeaponCache
-	pup1Wait            int
-	pup2Weapons         WeaponCache
-	pup2Wait            int
+	PowerUps            []PowerUp
+	puplevel0           WeaponCache
+	pup0refresh         int
+	puplevel1           WeaponCache
+	pup1refresh         int
+	puplevel2           WeaponCache
+	pup2refresh         int
 }
 
 // The syntax is command:comma,separated,args
@@ -213,7 +225,9 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		clearClientMoves(id, gv)
 	case "DISCONNECTED":
 		// remove the players
+		// TODO
 		// remove the client
+		// TODO
 	}
 	// check if we should update state (who's turn it is)
 	updateTurn(gv)
@@ -237,13 +251,14 @@ func updateClients(u UpdateGroup, gv *GameVariables) error {
 		}
 		// if the player has had everyone die, still show them whats happening
 		if getNumberPlayers(i, gv) > 0 {
-			client_u.PlayerUpdates = makePlayerUpdates(currentClient.Id, gv)
+			client_u.PlayerUpdates, client_u.PowerUpdates = makePlayerUpdates(currentClient.Id, gv)
 		} else if gv.turnNumber > 1 {
-			client_u.PlayerUpdates = makePlayerUpdates(-1, gv)
+			client_u.PlayerUpdates, client_u.PowerUpdates = makePlayerUpdates(-1, gv)
 		}
 		// Send the data
 		data, _ := client_u.MarshalJSON()
-		fmt.Printf("%d sees %q\n\n", currentClient.Id, data)
+		//fmt.Printf("%d sees %q\n\n", currentClient.Id, data)
+		fmt.Printf("Sent update to %d\n", currentClient.Id)
 		m := Message{"update", data}
 		json, _ := m.MarshalJSON()
 		currentClient.ConWrite <- json
@@ -273,6 +288,7 @@ func updateTurn(gv *GameVariables) {
 		// Give the next client moves
 		giveClientMoves(gv.ClientTurn, gv)
 		// add powerups
+		updatePowerups(gv)
 	}
 }
 
@@ -341,6 +357,8 @@ func StartGame(startup_path string) (int, error) {
 	if len(Clients) == 0 {
 		Clients = make(map[int]GameClient)
 	}
+	// make our powerups
+	gv.PowerUps = make([]PowerUp, 0, 8)
 	// Make defaults
 	gv.currentPlayerCount = 0
 	gv.movesPerPlayer = 12
@@ -351,6 +369,20 @@ func StartGame(startup_path string) (int, error) {
 	gv.ClientsInGame = 0
 	gv.ClientTurn = -1
 	gv.turnNumber = 0
+
+	var shotgunCache WeaponCache = make([]Weapon, 0, 1)
+	shotgunCache = shotgunCache.add(shotgun)
+	var rocketCache WeaponCache = make([]Weapon, 0, 1)
+	rocketCache = rocketCache.add(bazooka)
+	rocketCache = rocketCache.add(bazooka)
+	rocketCache = rocketCache.add(bazooka)
+	gv.puplevel0 = shotgunCache
+	gv.pup0refresh = -1
+	gv.puplevel1 = rocketCache
+	gv.pup1refresh = -1
+	gv.puplevel2 = rocketCache
+	gv.pup2refresh = -1
+
 	// Make our read chan
 	c := make(chan command)
 	con_read[gv.GameNumber] = c

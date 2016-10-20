@@ -52,7 +52,6 @@ type Tile struct {
 	health   int16
 	nextType int8
 	occupied bool
-	powerups WeaponCache
 }
 
 func (t Tile) MarshalJSON() ([]byte, error) {
@@ -60,14 +59,15 @@ func (t Tile) MarshalJSON() ([]byte, error) {
 	pos, _ := t.pos.MarshalJSON()
 	buf.Write(pos)
 	buf.WriteString(",\"tType\":")
-	buf.WriteString(strconv.FormatInt(int64(t.tType), 10))
+	if t.tType >= T_WALK {
+		buf.WriteString(strconv.FormatInt(int64(T_WALK), 10))
+	} else {
+		buf.WriteString(strconv.FormatInt(int64(t.tType), 10))
+	}
 	buf.WriteString(",\"health\":")
 	buf.WriteString(strconv.FormatInt(int64(t.health), 10))
 	buf.WriteString(",\"nextType\":")
 	buf.WriteString(strconv.FormatInt(int64(t.nextType), 10))
-	buf.WriteString(",\"powerups\":")
-	p, _ := t.powerups.MarshalJSON()
-	buf.Write(p)
 	buf.WriteString("}")
 	return buf.Bytes(), nil
 }
@@ -89,16 +89,12 @@ func isInBounds(x, y int16, gv *GameVariables) bool {
 
 func isWalkable(x, y int16, gv *GameVariables) bool {
 	if !isInBounds(x, y, gv) {
-		fmt.Printf("\t%d,%d is out of bounds\n", x, y)
 		return false
 	} else if gv.GameMap[y][x].tType < T_WALK {
-		fmt.Printf("\t%d,%d is type %d\n", x, y, gv.GameMap[y][x].tType)
 		return false
 	} else if gv.GameMap[y][x].occupied == true {
-		fmt.Printf("\t%d,%d is occupied\n", x, y)
 		return false
 	}
-	fmt.Printf("\t%d,%d is empty\n", x, y)
 	return true
 }
 
@@ -213,6 +209,29 @@ func LoadMap(map_args string, gv *GameVariables) error {
 					client: -1,
 				}
 				gv.Spawns = append(gv.Spawns, new_spawn)
+			} else if tile.tType == T_PUP0 || tile.tType == T_PUP1 || tile.tType == T_PUP2 {
+				// add a powerup here
+				var set_cache WeaponCache
+				var refresh int
+				if tile.tType == T_PUP2 {
+					set_cache = gv.puplevel2
+					refresh = gv.pup2refresh
+				} else if tile.tType == T_PUP1 {
+					set_cache = gv.puplevel1
+					refresh = gv.pup1refresh
+				} else {
+					set_cache = gv.puplevel0
+					refresh = gv.pup0refresh
+				}
+				var new_cache WeaponCache = make([]Weapon, 0, len(set_cache))
+				new_cache = append(new_cache, set_cache...)
+				new_powerup := PowerUp{
+					weapons:     new_cache,
+					pos:         Position{x: j, y: i},
+					refresh:     refresh,
+					clientsFlag: -1,
+				}
+				gv.PowerUps = append(gv.PowerUps, new_powerup)
 			}
 			tile.occupied = false
 			row[j] = tile
@@ -338,6 +357,12 @@ func printAsciiMap(gm [][]Tile) {
 				fmt.Printf("+")
 			} else if gm[y][x].tType == T_FLAG {
 				fmt.Printf("*")
+			} else if gm[y][x].tType == T_PUP0 {
+				fmt.Printf("$")
+			} else if gm[y][x].tType == T_PUP1 {
+				fmt.Printf("$")
+			} else if gm[y][x].tType == T_PUP2 {
+				fmt.Printf("$")
 			}
 		}
 		fmt.Printf("\n")

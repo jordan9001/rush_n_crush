@@ -16,7 +16,6 @@ type Weapon struct {
 	ammo             int16
 	movesCost        int8
 	distance         int16
-	clientsFlag      int
 }
 
 func (w Weapon) makeCopy() (r Weapon) {
@@ -72,6 +71,31 @@ func (wc WeaponCache) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+type PowerUp struct {
+	weapons     WeaponCache
+	pos         Position
+	refresh     int
+	clientsFlag int
+}
+
+func (pu PowerUp) getId() int32 {
+	var id int32 = (int32(pu.pos.x) << 16) & int32(pu.pos.y)
+	return id
+}
+
+func (pu PowerUp) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBufferString("{\"weapons\":")
+	p, _ := pu.weapons.MarshalJSON()
+	buf.Write(p)
+	buf.WriteString(",\"pos\":")
+	pos, _ := pu.pos.MarshalJSON()
+	buf.Write(pos)
+	buf.WriteString(",\"clientsFlag\":")
+	buf.WriteString(strconv.FormatInt(int64(pu.clientsFlag), 10))
+	buf.WriteString("}")
+	return buf.Bytes(), nil
+}
+
 type HitInfo struct {
 	damageType string
 	pos        Position
@@ -91,7 +115,19 @@ func (h HitInfo) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-var GameWeapons []Weapon
+func updatePowerups(gv *GameVariables) bool {
+	// TODO
+	return false
+}
+
+func getPowerup(x, y int16, gv *GameVariables) (pu *PowerUp, found bool) {
+	for i := 0; i < len(gv.PowerUps); i++ {
+		if gv.PowerUps[i].pos.x == x && gv.PowerUps[i].pos.y == y {
+			return &gv.PowerUps[i], true
+		}
+	}
+	return &PowerUp{}, false
+}
 
 // damage functions
 // should only be called if the weapon has enough ammo, and the player has enough moves
@@ -122,6 +158,17 @@ func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup,
 	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, false, gv)
 
 	return genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
+}
+
+func damageSpread(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
+	num_shots := 12
+	rand_max := 30
+	for i := 0; i < num_shots; i++ {
+		direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
+		hx, hy := traceDir(start_x, start_y, direction, w.distance, true, false, gv)
+		genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
+	}
+	return true
 }
 
 func damageMelee(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
@@ -186,7 +233,6 @@ var pistol Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        4,
 	distance:         64,
-	clientsFlag:      -1,
 }
 
 var shovel Weapon = Weapon{
@@ -198,7 +244,6 @@ var shovel Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        3,
 	distance:         1,
-	clientsFlag:      -1,
 }
 
 var bazooka Weapon = Weapon{
@@ -207,10 +252,20 @@ var bazooka Weapon = Weapon{
 	playerDamageMult: 80,
 	tileDamageMult:   80,
 	damageType:       "explosion",
-	ammo:             3,
+	ammo:             1,
 	movesCost:        11,
 	distance:         45,
-	clientsFlag:      -1,
+}
+
+var shotgun Weapon = Weapon{
+	name:             "shotgun",
+	damage:           damageSpread,
+	playerDamageMult: 10,
+	tileDamageMult:   6,
+	damageType:       "bullet",
+	ammo:             6,
+	movesCost:        6,
+	distance:         45,
 }
 
 var flag Weapon = Weapon{
@@ -222,5 +277,4 @@ var flag Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        2,
 	distance:         1,
-	clientsFlag:      -1,
 }

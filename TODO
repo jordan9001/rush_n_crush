@@ -1,9 +1,13 @@
 Server Side:
 	Chat (with origin player? Could be fun)
+	Lobby
 	Handle disconnects
-	Handle mutiple clients
 	Handle connections during game
 	Timeout turn
+	Flag
 
 Client Side:
 	all the server stuff
+	click on weapons without shooting
+	crosshair
+	
