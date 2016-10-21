@@ -154,6 +154,19 @@ func damageTile(x, y, damage int16, u *UpdateGroup, gv *GameVariables) {
 	}
 }
 
+func createTile(x, y, health int16, u *UpdateGroup, gv *GameVariables) {
+	if gv.GameMap[y][x].tType >= T_WALK && gv.GameMap[y][x].tType != T_FLAG {
+		gv.GameMap[y][x].nextType = gv.GameMap[y][x].tType
+		gv.GameMap[y][x].health = health
+		if health >= T_SWALL_H {
+			gv.GameMap[y][x].tType = T_SWALL
+		} else {
+			gv.GameMap[y][x].tType = T_WWALL
+		}
+		u.TileUpdates = append(u.TileUpdates, gv.GameMap[y][x])
+	}
+}
+
 func LoadMap(map_args string, gv *GameVariables) error {
 	maparr := strings.Split(map_args, ",")
 	var w, h int16
@@ -225,11 +238,13 @@ func LoadMap(map_args string, gv *GameVariables) error {
 				}
 				var new_cache WeaponCache = make([]Weapon, 0, len(set_cache))
 				new_cache = append(new_cache, set_cache...)
+				var slice_on_cache WeaponCache = new_cache[:0]
 				new_powerup := PowerUp{
-					weapons:     new_cache,
-					pos:         Position{x: j, y: i},
-					refresh:     refresh,
-					clientsFlag: -1,
+					weapons:         slice_on_cache,
+					possibleWeapons: new_cache,
+					pos:             Position{x: j, y: i},
+					refresh:         refresh,
+					lastRefresh:     -1,
 				}
 				gv.PowerUps = append(gv.PowerUps, new_powerup)
 			}

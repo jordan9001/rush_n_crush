@@ -17,6 +17,7 @@ type Weapon struct {
 	movesCost        int8
 	distance         int16
 	randomAngle      int
+	shotsPerShot     int
 }
 
 func (w Weapon) makeCopy() (r Weapon) {
@@ -76,10 +77,11 @@ func (wc WeaponCache) MarshalJSON() ([]byte, error) {
 }
 
 type PowerUp struct {
-	weapons     WeaponCache
-	pos         Position
-	refresh     int
-	clientsFlag int
+	weapons         WeaponCache
+	possibleWeapons WeaponCache
+	pos             Position
+	refresh         int
+	lastRefresh     int
 }
 
 func (pu PowerUp) getId() int32 {
@@ -94,8 +96,6 @@ func (pu PowerUp) MarshalJSON() ([]byte, error) {
 	buf.WriteString(",\"pos\":")
 	pos, _ := pu.pos.MarshalJSON()
 	buf.Write(pos)
-	buf.WriteString(",\"clientsFlag\":")
-	buf.WriteString(strconv.FormatInt(int64(pu.clientsFlag), 10))
 	buf.WriteString("}")
 	return buf.Bytes(), nil
 }
@@ -120,7 +120,17 @@ func (h HitInfo) MarshalJSON() ([]byte, error) {
 }
 
 func updatePowerups(gv *GameVariables) bool {
-	// TODO
+	// check each powerup
+	for i := 0; i < len(gv.PowerUps); i++ {
+		if (gv.PowerUps[i].refresh == -1 && gv.PowerUps[i].lastRefresh < 0) || (gv.PowerUps[i].refresh > -1 && gv.PowerUps[i].refresh <= gv.turnNumber-gv.PowerUps[i].lastRefresh) {
+			gv.PowerUps[i].lastRefresh = gv.turnNumber
+			if len(gv.PowerUps[i].possibleWeapons) > 0 {
+				toadd := rand.Intn(len(gv.PowerUps[i].possibleWeapons))
+				gv.PowerUps[i].weapons = gv.PowerUps[i].possibleWeapons[toadd : toadd+1]
+				fmt.Printf("Updated PowerUp at %d,%d to have %q\n", gv.PowerUps[i].pos.x, gv.PowerUps[i].pos.y, gv.PowerUps[i].weapons[0].name)
+			}
+		}
+	}
 	return false
 }
 
@@ -145,6 +155,8 @@ func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32
 
 	if gv.GameMap[hy][hx].occupied == true {
 		damagePlayer(hx, hy, int16(float32(w.playerDamageMult)*multiplier), u, gv)
+	} else if w.tileDamageMult < 0 {
+		createTile(hx, hy, w.tileDamageMult, u, gv)
 	} else {
 		damageTile(hx, hy, int16(float32(w.tileDamageMult)*multiplier), u, gv)
 	}
@@ -155,27 +167,26 @@ func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32
 }
 
 func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
-	fmt.Printf("Weapon = %v, Rand_max = %v\n", w.name, w.randomAngle)
 	rand_max := w.randomAngle
 	// Add some random to the shots
 	if rand_max > 0 {
 		direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 	}
 	// ray trace till we hit something
-	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, false, gv)
+	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, (w.tileDamageMult < 0), gv)
 
 	return genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
 }
 
 func damageSpread(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
-	num_shots := 12
+	num_shots := w.shotsPerShot
 	rand_max := w.randomAngle
 	for i := 0; i < num_shots; i++ {
 		new_direction := direction
 		if rand_max > 0 {
 			new_direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
 		}
-		hx, hy := traceDir(start_x, start_y, new_direction, w.distance, true, false, gv)
+		hx, hy := traceDir(start_x, start_y, new_direction, w.distance, true, (w.tileDamageMult < 0), gv)
 		genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
 	}
 	return true
@@ -200,7 +211,50 @@ func damageMelee(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv
 		hx = start_x
 		hy = start_y - w.distance
 	}
+
 	return genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
+}
+
+func damageWall(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
+	var hx, hy int16
+	var hsx, hsy int16
+	var hitareas []int16
+	for direction < 0 {
+		direction += 360
+	}
+	direction = direction % 360
+	if direction < 45 || direction > 315 {
+		hx = start_x + w.distance
+		hy = start_y
+	} else if direction < 135 {
+		hx = start_x
+		hy = start_y + w.distance
+	} else if direction < 225 {
+		hx = start_x - w.distance
+		hy = start_y
+	} else {
+		hx = start_x
+		hy = start_y - w.distance
+	}
+	hitareas = make([]int16, 0, 2*w.shotsPerShot)
+	if hx != start_x {
+		for dy := -(w.shotsPerShot / 2); dy < (w.shotsPerShot/2)+1; dy++ {
+			hsx, hsy = trace(start_x, start_y, hx, hy+int16(dy), true, (w.tileDamageMult < 0), gv)
+			hitareas = append(hitareas, hsx)
+			hitareas = append(hitareas, hsy)
+		}
+	} else {
+		for dx := -(w.shotsPerShot / 2); dx < (w.shotsPerShot/2)+1; dx++ {
+			hsx, hsy = trace(start_x, start_y, hx+int16(dx), hy, true, (w.tileDamageMult < 0), gv)
+			hitareas = append(hitareas, hsx)
+			hitareas = append(hitareas, hsy)
+		}
+
+	}
+	for i := 0; i < len(hitareas); i += 2 {
+		genericDamage(hitareas[i], hitareas[i+1], start_x, start_y, direction, 1.0, w, u, gv)
+	}
+	return true
 }
 
 func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
@@ -216,11 +270,13 @@ func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup
 		return false
 	}
 	aoe := [][]float32{
-		[]float32{0.0, 0.0, 0.1, 0.0, 0.0},
-		[]float32{0.0, 0.2, 0.5, 0.2, 0.0},
-		[]float32{0.1, 0.5, 0.0, 0.5, 0.1},
-		[]float32{0.0, 0.2, 0.5, 0.2, 0.0},
-		[]float32{0.0, 0.0, 0.1, 0.0, 0.0},
+		[]float32{0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0},
+		[]float32{0.0, 0.0, 0.2, 0.3, 0.2, 0.0, 0.0},
+		[]float32{0.0, 0.2, 0.3, 0.4, 0.3, 0.2, 0.0},
+		[]float32{0.1, 0.3, 0.4, 0.0, 0.4, 0.3, 0.1},
+		[]float32{0.0, 0.2, 0.3, 0.4, 0.3, 0.2, 0.0},
+		[]float32{0.0, 0.0, 0.2, 0.3, 0.2, 0.0, 0.0},
+		[]float32{0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0},
 	}
 	for i := 0; i < len(aoe[0]); i++ {
 		for j := 0; j < len(aoe); j++ {
@@ -245,7 +301,21 @@ var pistol Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        4,
 	distance:         64,
-	randomAngle:      3,
+	randomAngle:      6,
+	shotsPerShot:     1,
+}
+
+var sniper Weapon = Weapon{
+	name:             "sniper",
+	damage:           damageStraight,
+	playerDamageMult: 70,
+	tileDamageMult:   20,
+	damageType:       "bullet",
+	ammo:             5,
+	movesCost:        8,
+	distance:         64,
+	randomAngle:      1,
+	shotsPerShot:     1,
 }
 
 var shovel Weapon = Weapon{
@@ -258,18 +328,33 @@ var shovel Weapon = Weapon{
 	movesCost:        3,
 	distance:         1,
 	randomAngle:      0,
+	shotsPerShot:     1,
 }
 
 var bazooka Weapon = Weapon{
 	name:             "bazooka",
 	damage:           damageExplosion,
-	playerDamageMult: 80,
+	playerDamageMult: 75,
 	tileDamageMult:   100,
 	damageType:       "explosion",
 	ammo:             2,
-	movesCost:        8,
+	movesCost:        9,
 	distance:         45,
 	randomAngle:      6,
+	shotsPerShot:     1,
+}
+
+var suicide Weapon = Weapon{
+	name:             "suicide",
+	damage:           damageExplosion,
+	playerDamageMult: 400,
+	tileDamageMult:   100,
+	damageType:       "explosion",
+	ammo:             1,
+	movesCost:        5,
+	distance:         0,
+	randomAngle:      0,
+	shotsPerShot:     1,
 }
 
 var shotgun Weapon = Weapon{
@@ -282,6 +367,33 @@ var shotgun Weapon = Weapon{
 	movesCost:        6,
 	distance:         45,
 	randomAngle:      30,
+	shotsPerShot:     12,
+}
+
+var eztrump Weapon = Weapon{
+	name:             "eztrump",
+	damage:           damageWall,
+	playerDamageMult: 0,
+	tileDamageMult:   -30,
+	damageType:       "wall",
+	ammo:             4,
+	movesCost:        5,
+	distance:         3,
+	randomAngle:      0,
+	shotsPerShot:     5,
+}
+
+var minecraft Weapon = Weapon{
+	name:             "minecraft",
+	damage:           damageMelee,
+	playerDamageMult: 0,
+	tileDamageMult:   -30,
+	damageType:       "wall",
+	ammo:             15,
+	movesCost:        3,
+	distance:         1,
+	randomAngle:      0,
+	shotsPerShot:     1,
 }
 
 var flag Weapon = Weapon{
@@ -294,4 +406,5 @@ var flag Weapon = Weapon{
 	movesCost:        2,
 	distance:         1,
 	randomAngle:      0,
+	shotsPerShot:     1,
 }

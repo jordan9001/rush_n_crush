@@ -146,7 +146,8 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		fmt.Printf("Sending gamestate to client %d\n", id)
 		gv.ClientsInGame++
 		// see if we have a spawn for them
-		for i := 0; i < len(gv.Spawns); i++ {
+		perm := rand.Perm(len(gv.Spawns))
+		for i, _ := range perm {
 			if gv.Spawns[i].client < 0 {
 				gv.Spawns[i].client = id
 				break
@@ -224,8 +225,9 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		// Move to next Client
 		clearClientMoves(id, gv)
 	case "DISCONNECTED":
+		clearClientMoves(id, gv)
 		// remove the players
-		// TODO
+		clearPlayers(id, gv)
 		// remove the client
 		// TODO
 	}
@@ -370,17 +372,21 @@ func StartGame(startup_path string) (int, error) {
 	gv.ClientTurn = -1
 	gv.turnNumber = 0
 
-	var shotgunCache WeaponCache = make([]Weapon, 0, 1)
+	var shotgunCache WeaponCache = make([]Weapon, 0, 2)
 	shotgunCache = shotgunCache.add(shotgun)
-	var rocketCache WeaponCache = make([]Weapon, 0, 1)
+	shotgunCache = shotgunCache.add(sniper)
+	var rocketCache WeaponCache = make([]Weapon, 0, 2)
 	rocketCache = rocketCache.add(bazooka)
 	rocketCache = rocketCache.add(bazooka)
-	rocketCache = rocketCache.add(bazooka)
+	rocketCache = rocketCache.add(suicide)
+	var wallCache WeaponCache = make([]Weapon, 0, 2)
+	wallCache = wallCache.add(eztrump)
+	wallCache = wallCache.add(minecraft)
 	gv.puplevel0 = shotgunCache
 	gv.pup0refresh = -1
 	gv.puplevel1 = rocketCache
 	gv.pup1refresh = -1
-	gv.puplevel2 = rocketCache
+	gv.puplevel2 = wallCache
 	gv.pup2refresh = -1
 
 	// Make our read chan

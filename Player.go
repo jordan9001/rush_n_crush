@@ -334,6 +334,15 @@ func getNumberPlayers(id int, gv *GameVariables) int8 {
 	return num
 }
 
+func clearPlayers(id int, gv *GameVariables) {
+	for i := 0; i < len(gv.GamePlayers); i++ {
+		if gv.GamePlayers[i].owner == id {
+			gv.GamePlayers = append(gv.GamePlayers[:i], gv.GamePlayers[i+1:]...)
+			i--
+		}
+	}
+}
+
 func getClientMoves(id int, gv *GameVariables) int {
 	var moves int
 	for _, p := range gv.GamePlayers {
