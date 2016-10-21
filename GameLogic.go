@@ -229,7 +229,8 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		// remove the players
 		clearPlayers(id, gv)
 		// remove the client
-		// TODO
+		gv.ClientsInGame--
+		delete(Clients, id)
 	}
 	// check if we should update state (who's turn it is)
 	updateTurn(gv)
@@ -275,9 +276,20 @@ func updateTurn(gv *GameVariables) {
 			gv.ClientTurn = 0
 			changedTurn = true
 		} else if getClientMoves(gv.ClientTurn, gv) <= 0 {
+			next := false
 			for {
-				gv.ClientTurn = (gv.ClientTurn + 1) % len(Clients)
-				if gv.GameNumber == Clients[gv.ClientTurn].GameNumber && getNumberPlayers(gv.ClientTurn, gv) > 0 {
+				for i, v := range Clients {
+					if next {
+						if gv.ClientTurn == i || (gv.GameNumber == v.GameNumber && getNumberPlayers(i, gv) > 0) {
+							gv.ClientTurn = i
+							next = false
+							break
+						}
+					} else if i == gv.ClientTurn {
+						next = true
+					}
+				}
+				if next == false {
 					break
 				}
 			}
