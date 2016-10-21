@@ -5,8 +5,14 @@ Server Side:
 	Handle connections during game
 	Timeout turn
 	Flag
+	Balance Weapons
+	Encourage Exploring / More moves?
+	random angle is showing up as zero?
 
 Client Side:
+	pad the fullscreen down a bit
+	focus on where you click. When you click on your guy, you select them. When you click on a weapon, you select it, and go into shooting mode. Click outside the map to cancel shooting.
+	
 	all the server stuff
 	click on weapons without shooting
 	crosshair

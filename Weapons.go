@@ -16,6 +16,7 @@ type Weapon struct {
 	ammo             int16
 	movesCost        int8
 	distance         int16
+	randomAngle      int
 }
 
 func (w Weapon) makeCopy() (r Weapon) {
@@ -28,6 +29,7 @@ func (w Weapon) makeCopy() (r Weapon) {
 		ammo:             w.ammo,
 		movesCost:        w.movesCost,
 		distance:         w.distance,
+		randomAngle:      w.randomAngle,
 	}
 	return
 }
@@ -39,7 +41,9 @@ func (w Weapon) MarshalJSON() ([]byte, error) {
 	buf.WriteString(strconv.FormatInt(int64(w.ammo), 10))
 	buf.WriteString(",\"move_cost\":")
 	buf.WriteString(strconv.FormatInt(int64(w.movesCost), 10))
-	buf.WriteString("}")
+	buf.WriteString(",\"damageType\":\"")
+	buf.WriteString(w.damageType)
+	buf.WriteString("\"}")
 	return buf.Bytes(), nil
 }
 
@@ -137,7 +141,7 @@ func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32
 		return false
 	}
 
-	fmt.Printf("Shot %d,%d\n", hx, hy)
+	fmt.Printf("Shot %d,%d with %s\n", hx, hy, w.name)
 
 	if gv.GameMap[hy][hx].occupied == true {
 		damagePlayer(hx, hy, int16(float32(w.playerDamageMult)*multiplier), u, gv)
@@ -151,9 +155,12 @@ func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32
 }
 
 func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
+	fmt.Printf("Weapon = %v, Rand_max = %v\n", w.name, w.randomAngle)
+	rand_max := w.randomAngle
 	// Add some random to the shots
-	rand_max := 18
-	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
+	if rand_max > 0 {
+		direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
+	}
 	// ray trace till we hit something
 	hx, hy := traceDir(start_x, start_y, direction, w.distance, true, false, gv)
 
@@ -162,10 +169,13 @@ func damageStraight(start_x, start_y, direction int16, w Weapon, u *UpdateGroup,
 
 func damageSpread(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
 	num_shots := 12
-	rand_max := 30
+	rand_max := w.randomAngle
 	for i := 0; i < num_shots; i++ {
-		direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
-		hx, hy := traceDir(start_x, start_y, direction, w.distance, true, false, gv)
+		new_direction := direction
+		if rand_max > 0 {
+			new_direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
+		}
+		hx, hy := traceDir(start_x, start_y, new_direction, w.distance, true, false, gv)
 		genericDamage(hx, hy, start_x, start_y, direction, 1.0, w, u, gv)
 	}
 	return true
@@ -195,8 +205,10 @@ func damageMelee(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv
 
 func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
 	// Add some random to the shots
-	rand_max := 9
-	direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
+	rand_max := w.randomAngle
+	if rand_max > 0 {
+		direction = direction + int16(rand.Intn(rand_max)-(rand_max/2))
+	}
 	// ray trace till we hit something
 	ex, ey := traceDir(start_x, start_y, direction, w.distance, true, true, gv)
 	ret := genericDamage(ex, ey, start_x, start_y, direction, 1, w, u, gv)
@@ -233,6 +245,7 @@ var pistol Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        4,
 	distance:         64,
+	randomAngle:      3,
 }
 
 var shovel Weapon = Weapon{
@@ -244,17 +257,19 @@ var shovel Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        3,
 	distance:         1,
+	randomAngle:      0,
 }
 
 var bazooka Weapon = Weapon{
 	name:             "bazooka",
 	damage:           damageExplosion,
 	playerDamageMult: 80,
-	tileDamageMult:   80,
+	tileDamageMult:   100,
 	damageType:       "explosion",
-	ammo:             1,
-	movesCost:        11,
+	ammo:             2,
+	movesCost:        8,
 	distance:         45,
+	randomAngle:      6,
 }
 
 var shotgun Weapon = Weapon{
@@ -266,6 +281,7 @@ var shotgun Weapon = Weapon{
 	ammo:             6,
 	movesCost:        6,
 	distance:         45,
+	randomAngle:      30,
 }
 
 var flag Weapon = Weapon{
@@ -277,4 +293,5 @@ var flag Weapon = Weapon{
 	ammo:             -1,
 	movesCost:        2,
 	distance:         1,
+	randomAngle:      0,
 }

@@ -268,7 +268,7 @@ const (
 	CHANCE_B float64 = 0.6
 )
 
-func trace(px, py, x, y int16, chanceCoverBlock bool, stopBeforeHit bool, gv *GameVariables) (int16, int16) {
+func trace(px, py, x, y int16, projectile bool, stopBeforeHit bool, gv *GameVariables) (int16, int16) {
 	// fmt.Printf("Trace from %d,%d to %d,%d: ", px, py, x, y)
 	var dx, dirx, dy, diry int16
 	if x > px {
@@ -301,11 +301,12 @@ func trace(px, py, x, y int16, chanceCoverBlock bool, stopBeforeHit bool, gv *Ga
 		tile := gv.GameMap[sy][sx]
 		if sx == x && sy == y {
 			break
-		} else if tile.occupied && !(sx == px && sy == py) {
+		} else if tile.occupied && projectile && !(sx == px && sy == py) {
 			break
 		} else if tile.tType == T_SWALL || tile.tType == T_WWALL || tile.tType == T_EMPTY {
 			break
-		} else if chanceCoverBlock {
+		} else if projectile {
+			// we have a chance of hitting the cover blocks
 			if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
 				// we have a chance to hit here, depending on how close we are to the cover
 				dist2 := float64(((sx - px) * (sx - px)) + ((sy - py) * (sy - py)))

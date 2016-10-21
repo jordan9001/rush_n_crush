@@ -10,6 +10,7 @@ function RushNCrush(url, canvas_id) {
 	this.maph = 0;
 	this.focux = 0;
 	this.focuy = 0;
+	this.playerlock = true;
 	this.player_index = -1;
 	this.zoom = 1;
 
@@ -17,6 +18,7 @@ function RushNCrush(url, canvas_id) {
 	this.userid = undefined;
 	this.user_turn = undefined;
 	this.ingame = false;
+	this.clickable = []; // clickable and mouseover ui elements, {x,y,w,h,click,over}
 	
 	// game objects
 	this.players = [];
@@ -36,16 +38,19 @@ function RushNCrush(url, canvas_id) {
 
 	// Set up interaction
 	this.canvas.addEventListener('wheel', function(evt){
-		that.zoom += evt.deltaY / 30;
-		if (that.zoom <= 1) {
-			that.zoom = 1
-		}
-		that.draw(true);
+		// scroll nicely by mouse location
+		var rect = that.canvas.getBoundingClientRect();
+		var px = event.clientX - rect.left;
+		var py = event.clientY - rect.top;
+		that.handle_scroll(px,py, evt.deltaY/30);
 		evt.returnValue = false;
 		return false; 
 	}, false);
 	this.canvas.addEventListener('mousedown', function(evt){
-		that.handle_click();
+		var rect = that.canvas.getBoundingClientRect();
+		var px = event.clientX - rect.left;
+		var py = event.clientY - rect.top;
+		that.handle_click(px, py);
 	});
 	this.canvas.addEventListener('mousemove', function(evt){
 		var rect = that.canvas.getBoundingClientRect();
@@ -56,32 +61,85 @@ function RushNCrush(url, canvas_id) {
 		
 	});
 	document.addEventListener('keydown', function(evt) {
-		var ret_code = true;
-		if (evt.keyCode == 65 || evt.keyCode == 37) {
-			ret_code = false;
+		var ret_code = false;
+		var panspeed = 24;
+		if (evt.keyCode == 65) {
 			that.move_player(-1,0);
-		} else if (evt.keyCode == 68 || evt.keyCode == 39) {
-			ret_code = false;
+		} else if (evt.keyCode == 68) {
 			that.move_player(1,0);
-		} else if (evt.keyCode == 87 || evt.keyCode == 38) {
-			ret_code = false;
+		} else if (evt.keyCode == 87) {
 			that.move_player(0,-1);
-		} else if (evt.keyCode == 83 || evt.keyCode == 40) {
-			ret_code = false;
+		} else if (evt.keyCode == 83) {
 			that.move_player(0,1);
+		} else if (evt.keyCode == 37) {
+			that.focux -= (1/that.zoom) * panspeed;
+			if (that.focux < 0) {
+				that.focux = 0;
+			}
+			that.draw(true);
+		} else if (evt.keyCode == 39) {
+			that.focux += (1/that.zoom) * panspeed;
+			if (that.focux > that.mapw) {
+				that.focux = that.mapw;
+			}
+			that.draw(true);
+		} else if (evt.keyCode == 38) {
+			that.focuy -= (1/that.zoom) * panspeed;
+			if (that.focuy < 0) {
+				that.focuy = 0;
+			}
+			that.draw(true);
+		} else if (evt.keyCode == 40) {
+			that.focuy += (1/that.zoom) * panspeed;
+			if (that.focuy > that.maph) {
+				that.focuy = that.maph;
+			}
+			that.draw(true);
 		} else if (evt.keyCode == 32) {
-			ret_code = false;
 			that.next_player();
 		} else if (evt.keyCode == 13) {
-			ret_code = false;
 			that.end_turn();
 		} else if (evt.keyCode <= 57 && evt.keyCode >= 49) {
-			ret_code = false;
 			that.choose_weapon(evt.keyCode - 49);
+		} else {
+			ret_code = true;
 		}
 		evt.returnValue = ret_code;
 		return ret_code;
 	});
+}
+
+RushNCrush.prototype.handle_scroll = function(px, py, scrolly) {
+		var lockpoint = this.px2coord(px,py);
+		var pfocus = this.coord2px(that.focux, that.focuy);
+		// if the lock point is within 1 square of our selected guy, just lock onto the player 
+
+		if (this.player_index >= 0 && this.players[this.player_index].pos.x == Math.floor(lockpoint[0]) && Math.floor(lockpoint[0]) == Math.floor(this.focux) && this.players[this.player_index].pos.y == Math.floor(lockpoint[1]) && Math.floor(lockpoint[1]) == Math.floor(this.focuy)) {
+			this.zoom += scrolly;
+			if (this.zoom <= 1) {
+				this.zoom = 1
+			}
+			this.focux = this.players[this.player_index].pos.x + 0.5;
+			this.focuy = this.players[this.player_index].pos.y + 0.5;
+			this.playerlock = true;
+			console.log("Locked");
+		} else {
+			var dx = px - pfocus[0];
+			var dy = py - pfocus[1];
+
+			this.zoom += scrolly;
+			if (this.zoom <= 1) {
+				this.zoom = 1
+			}
+			var lockpx = this.coord2px(lockpoint[0], lockpoint[1]);
+			var nfocus = this.px2coord(lockpx[0] - dx, lockpx[1] - dy);
+			this.focux = nfocus[0];
+			this.focuy = nfocus[1];
+
+			this.playerlock = false;
+		}
+
+		this.draw(true);
 }
 
 RushNCrush.prototype.handle_point = function(x, y) {
@@ -95,7 +153,23 @@ RushNCrush.prototype.handle_point = function(x, y) {
 	}
 };
 
-RushNCrush.prototype.handle_click = function() {
+RushNCrush.prototype.handle_click = function(px, py) {
+	// check if we are over any of our hotspots
+	for (var i=0; i<this.clickable.length; i++) {
+		if (px > this.clickable[i].x && py > this.clickable[i].y && px < this.clickable[i].x + this.clickable[i].w && py < this.clickable[i].y + this.clickable[i].h) {
+			this.clickable[i].click();
+			console.log("Clicked");
+			return;
+		}
+	}
+	// check bounds	
+	coord = that.px2coord(px, py);
+	if (coord[0] >= 0 && coord[1] >= 0 && coord[0] < this.mapw && coord[1] < this.maph) {
+		this.fire();
+	}
+}
+
+RushNCrush.prototype.fire = function() {
 	if (this.animating) {
 		return;
 	}
@@ -168,8 +242,9 @@ RushNCrush.prototype.next_player = function() {
 	for (var i=1; i<=this.players.length; i++) {
 		if (this.players[(this.player_index + i) % this.players.length].owner == this.userid) {
 			this.player_index = (this.player_index + i) % this.players.length;
-			this.focux = this.players[this.player_index].pos.x;
-			this.focuy = this.players[this.player_index].pos.y;
+			this.focux = this.players[this.player_index].pos.x + 0.5;
+			this.focuy = this.players[this.player_index].pos.y + 0.5;
+			this.playerlock = true;
 			this.draw(false);
 			return;
 		}
@@ -205,11 +280,6 @@ RushNCrush.prototype.update_game = function(data) {
 						// queue for animation
 						this.player_animate(p, this.players[p].pos.x, this.players[p].pos.y, u_p[i].pos.x, u_p[i].pos.y);
 					}
-					// if we are focusing on this player already, keep the focus
-					if (p == this.player_index) {
-						this.focux = u_p[i].pos.x;
-						this.focuy = u_p[i].pos.y;
-					}
 					// keep the correct weapon selected
 					var selected_weapon = this.players[p].selected_weapon;
 					// remove this from our updated array, and break
@@ -227,8 +297,10 @@ RushNCrush.prototype.update_game = function(data) {
 				if (focusid >= 0) {
 					for (var np=0; np < this.players.length; np++) {
 						if (this.players[np].id == focusid) {
-							this.focux = this.players[np].pos.x;
-							this.focuy = this.players[np].pos.y;
+							if (this.playerlock) {
+								this.focux = this.players[np].pos.x + 0.5;
+								this.focuy = this.players[np].pos.y + 0.5;
+							}
 							this.player_index = np;
 							break;
 						}
@@ -243,8 +315,9 @@ RushNCrush.prototype.update_game = function(data) {
 			this.players.push(u_p[i]);
 			if (u_p[i].owner == this.userid && this.player_index < 0) {
 				// focus on the new player
-				this.focux = u_p[i].pos.x;
-				this.focuy = u_p[i].pos.y;
+				this.focux = u_p[i].pos.x + 0.5;
+				this.focuy = u_p[i].pos.y + 0.5;
+				this.playerlock = true;
 				this.player_index = this.players.length - 1;
 			}
 		}
@@ -269,6 +342,7 @@ RushNCrush.prototype.build_map = function(maparr) {
 	// set default focus
 	this.focux = this.mapw / 2.0;
 	this.focuy = this.maph / 2.0;
+	this.playerlock = false;
 
 	// set default zoom
 	this.zoom = this.canvas.width / this.mapw;
@@ -367,9 +441,9 @@ RushNCrush.prototype.player_animate = function(p_index, sx,sy, x,y) {
 		that.players[p_index].pos.y = sy + dy;
 
 		// change focus
-		if (p_index == that.player_index) {
-			that.focux = sx + dx;
-			that.focuy = sy + dy;
+		if (p_index == that.player_index && that.playerlock) {
+			that.focux = sx + dx + 0.5;
+			that.focuy = sy + dy + 0.5;
 		}
 		anistep = anistep + 1;
 
@@ -390,8 +464,8 @@ RushNCrush.prototype.coord2px = function(x, y) {
 	var px;
 	var py;
 	
-	px = ((x * this.zoom) - ((this.focux + 0.5) * this.zoom)) + (this.canvas.width / 2);
-	py = ((y * this.zoom) - ((this.focuy + 0.5) * this.zoom)) + (this.canvas.height / 2);
+	px = ((x * this.zoom) - ((this.focux) * this.zoom)) + (this.canvas.width / 2);
+	py = ((y * this.zoom) - ((this.focuy) * this.zoom)) + (this.canvas.height / 2);
 
 	return [px, py];
 };
@@ -400,8 +474,8 @@ RushNCrush.prototype.px2coord = function(px, py) {
 	var x;
 	var y;
 
-	x = ((px - (this.canvas.width / 2)) / this.zoom) + (this.focux + 0.5);
-	y = ((py - (this.canvas.height / 2)) / this.zoom) + (this.focuy + 0.5);
+	x = ((px - (this.canvas.width / 2)) / this.zoom) + (this.focux);
+	y = ((py - (this.canvas.height / 2)) / this.zoom) + (this.focuy);
 
 	return [x,y];
 };
@@ -410,8 +484,8 @@ RushNCrush.prototype.draw = function(cast) {
 	// if the canvas size is wrong, set it
 	
 	if (cast && (this.ctx.canvas.width != window.innerWidth || this.ctx.canvas.height != window.innerHeight)) {
-		this.ctx.canvas.width  = window.innerWidth;
-		this.ctx.canvas.height = window.innerHeight;
+		this.ctx.canvas.width  = window.innerWidth - 12;
+		this.ctx.canvas.height = window.innerHeight - 12;
 	}
 	// Clear
 	this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -471,12 +545,16 @@ RushNCrush.prototype.draw_player = function(player) {
 		this.team_color[player.owner] = color;
 	}
 	this.ctx.fillStyle = this.team_color[player.owner];
+	this.ctx.strokeStyle = "#000000";
 	this.ctx.beginPath();
 	this.ctx.arc(center[0], center[1], this.zoom/2 - 0.5, 0, 2*Math.PI);
 	this.ctx.fill();
+	if (this.player_index >= 0 && this.players[this.player_index].id == player.id) {
+		this.ctx.lineWidth = this.zoom/18;
+		this.ctx.stroke();
+	}
 	// draw direction piece
 	this.ctx.fillStyle = "#FFFFFF";
-	this.ctx.strokeStyle = "#000000";
 	this.ctx.lineWidth = this.zoom / 90;
 	this.ctx.beginPath();
 	this.ctx.moveTo(center[0], center[1]);
@@ -568,6 +646,8 @@ RushNCrush.prototype.draw_powerup = function(powerup) {
 }
 
 RushNCrush.prototype.draw_ui = function() {
+	// clear clickable area
+	this.clickable = [];
 	// Draw current Turn
 	var box_size = 12;
 	var pad = 4;
@@ -624,6 +704,13 @@ RushNCrush.prototype.draw_ui = function() {
 			this.ctx.fillStyle = "#555"
 		}
 		this.ctx.fillText(text, x + pad, y + (box_size * 0.75));
+		// add clickable area
+		var that = this;
+		var clickarea = {x:x, y:y, w:w, h:box_size, index:i, click: function() {
+			that.choose_weapon(this.index);
+			console.log("Got clicked "+ this.index);
+		}, over: function(index) {}};
+		this.clickable.push(clickarea);
 	}
 }
 
@@ -664,13 +751,6 @@ RushNCrush.prototype.ray_cast = function(px, py, ex, ey) {
 	for (; n >= 0; n--) {
 		if (sx < 0 || sx >= this.mapw || sy < 0 || sy >= this.maph) {
 			return;
-		}
-		if (sx != px || sy != py) {
-			for (var i=0; i<this.players.length; i++) {
-				if (sx == this.players[i].pos.x && sy == this.players[i].pos.y) {
-					return;
-				}
-			}
 		}
 		this.map[sy][sx].lit = true;
 		tt = this.map[sy][sx].tType;
