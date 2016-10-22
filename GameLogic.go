@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -278,15 +279,24 @@ func updateTurn(gv *GameVariables) {
 			changedTurn = true
 		} else if getClientMoves(gv.ClientTurn, gv) <= 0 {
 			next := false
+			clientkeys := make([]int, 0, len(Clients))
+			for k, v := range Clients {
+				if v.GameNumber == gv.GameNumber {
+					clientkeys = append(clientkeys, k)
+				}
+			}
+			sort.Ints(clientkeys)
 			for {
-				for i, v := range Clients {
+				for _, i := range clientkeys {
 					if next {
-						if gv.ClientTurn == i || (gv.GameNumber == v.GameNumber && getNumberPlayers(i, gv) > 0) {
+						fmt.Printf("next is %d\n", i)
+						if gv.ClientTurn == i || getNumberPlayers(i, gv) > 0 {
 							gv.ClientTurn = i
 							next = false
 							break
 						}
 					} else if i == gv.ClientTurn {
+						fmt.Printf("ending turn of %d\n", i)
 						next = true
 					}
 				}
@@ -392,15 +402,16 @@ func StartGame(startup_path string) (int, error) {
 	rocketCache = rocketCache.add(bazooka)
 	rocketCache = rocketCache.add(bazooka)
 	rocketCache = rocketCache.add(suicide)
-	var wallCache WeaponCache = make([]Weapon, 0, 2)
+	var wallCache WeaponCache = make([]Weapon, 0, 3)
 	wallCache = wallCache.add(eztrump)
 	wallCache = wallCache.add(minecraft)
+	wallCache = wallCache.add(encase)
 	gv.puplevel0 = shotgunCache
-	gv.pup0refresh = 12
+	gv.pup0refresh = 6
 	gv.puplevel1 = rocketCache
-	gv.pup1refresh = 15
+	gv.pup1refresh = 9
 	gv.puplevel2 = wallCache
-	gv.pup2refresh = 9
+	gv.pup2refresh = 7
 
 	// Make our read chan
 	c := make(chan command)

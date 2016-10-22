@@ -147,7 +147,7 @@ func getPowerup(x, y int16, gv *GameVariables) (pu *PowerUp, found bool) {
 // should only be called if the weapon has enough ammo, and the player has enough moves
 func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32, w Weapon, u *UpdateGroup, gv *GameVariables) bool {
 	// Check bounds
-	if hx < 0 || hx > int16(len(gv.GameMap[0])) || hy < 0 || hy > int16(len(gv.GameMap)) {
+	if hx < 0 || hx >= int16(len(gv.GameMap[0])) || hy < 0 || hy >= int16(len(gv.GameMap)) {
 		return false
 	}
 
@@ -265,27 +265,35 @@ func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup
 	}
 	// ray trace till we hit something
 	ex, ey := traceDir(start_x, start_y, direction, w.distance, true, true, gv)
-	ret := genericDamage(ex, ey, start_x, start_y, direction, 1, w, u, gv)
-	if !ret {
-		return false
-	}
 	aoe := [][]float32{
 		[]float32{0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0},
-		[]float32{0.0, 0.0, 0.2, 0.3, 0.2, 0.0, 0.0},
+		[]float32{0.0, 0.0, 0.2, 0.2, 0.2, 0.0, 0.0},
 		[]float32{0.0, 0.2, 0.3, 0.4, 0.3, 0.2, 0.0},
-		[]float32{0.1, 0.3, 0.4, 0.0, 0.4, 0.3, 0.1},
+		[]float32{0.1, 0.2, 0.4, 0.0, 0.4, 0.2, 0.1},
 		[]float32{0.0, 0.2, 0.3, 0.4, 0.3, 0.2, 0.0},
-		[]float32{0.0, 0.0, 0.2, 0.3, 0.2, 0.0, 0.0},
+		[]float32{0.0, 0.0, 0.2, 0.2, 0.2, 0.0, 0.0},
 		[]float32{0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0},
 	}
+	hitareas := make([]int16, 0, len(aoe)*len(aoe[0])*2)
 	for i := 0; i < len(aoe[0]); i++ {
 		for j := 0; j < len(aoe); j++ {
 			if aoe[i][j] > 0 {
 				hx, hy := trace(ex, ey, ex+int16(i-(len(aoe[0])/2)), ey+int16(j-(len(aoe)/2)), true, false, gv)
+				hitareas = append(hitareas, hx)
+				hitareas = append(hitareas, hy)
+				hitareas = append(hitareas, int16(i))
+				hitareas = append(hitareas, int16(j))
 
-				genericDamage(hx, hy, ex, ey, direction, aoe[i][j], w, u, gv)
+				//genericDamage(hx, hy, ex, ey, direction, aoe[i][j], w, u, gv)
 			}
 		}
+	}
+	ret := genericDamage(ex, ey, start_x, start_y, direction, 1.0, w, u, gv)
+	if !ret {
+		return false
+	}
+	for i := 0; i < len(hitareas); i += 4 {
+		genericDamage(hitareas[i], hitareas[i+1], ex, ey, direction, aoe[hitareas[i+2]][hitareas[i+3]], w, u, gv)
 	}
 	return true
 }
@@ -295,13 +303,13 @@ func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup
 var pistol Weapon = Weapon{
 	name:             "pistol",
 	damage:           damageStraight,
-	playerDamageMult: 25,
+	playerDamageMult: 21,
 	tileDamageMult:   30,
 	damageType:       "bullet",
 	ammo:             -1,
 	movesCost:        4,
 	distance:         64,
-	randomAngle:      6,
+	randomAngle:      9,
 	shotsPerShot:     1,
 }
 
@@ -334,7 +342,7 @@ var shovel Weapon = Weapon{
 var bazooka Weapon = Weapon{
 	name:             "bazooka",
 	damage:           damageExplosion,
-	playerDamageMult: 75,
+	playerDamageMult: 70,
 	tileDamageMult:   100,
 	damageType:       "explosion",
 	ammo:             2,
@@ -370,13 +378,26 @@ var shotgun Weapon = Weapon{
 	shotsPerShot:     12,
 }
 
+var encase Weapon = Weapon{
+	name:             "encase",
+	damage:           damageExplosion,
+	playerDamageMult: 0,
+	tileDamageMult:   -10,
+	damageType:       "wall",
+	ammo:             1,
+	movesCost:        10,
+	distance:         20,
+	randomAngle:      6,
+	shotsPerShot:     1,
+}
+
 var eztrump Weapon = Weapon{
 	name:             "eztrump",
 	damage:           damageWall,
 	playerDamageMult: 0,
 	tileDamageMult:   -30,
 	damageType:       "wall",
-	ammo:             4,
+	ammo:             6,
 	movesCost:        5,
 	distance:         3,
 	randomAngle:      0,
@@ -389,8 +410,8 @@ var minecraft Weapon = Weapon{
 	playerDamageMult: 0,
 	tileDamageMult:   -30,
 	damageType:       "wall",
-	ammo:             15,
-	movesCost:        3,
+	ammo:             30,
+	movesCost:        2,
 	distance:         1,
 	randomAngle:      0,
 	shotsPerShot:     1,

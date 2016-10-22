@@ -314,21 +314,23 @@ func trace(px, py, x, y int16, projectile bool, stopBeforeHit bool, gv *GameVari
 			break
 		}
 		tile := gv.GameMap[sy][sx]
-		if sx == x && sy == y {
-			break
-		} else if tile.occupied && projectile && !(sx == px && sy == py) {
-			break
-		} else if tile.tType == T_SWALL || tile.tType == T_WWALL || tile.tType == T_EMPTY {
-			break
-		} else if projectile {
-			// we have a chance of hitting the cover blocks
-			if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
-				// we have a chance to hit here, depending on how close we are to the cover
-				dist2 := float64(((sx - px) * (sx - px)) + ((sy - py) * (sy - py)))
-				chancepass := (CHANCE_M / dist2) + CHANCE_B
-				randval := rand.Float64()
-				if randval > chancepass {
-					break
+		if sx != px || sy != py {
+			if sx == x && sy == y {
+				break
+			} else if tile.occupied && projectile && !(sx == px && sy == py) {
+				break
+			} else if tile.tType == T_SWALL || tile.tType == T_WWALL || tile.tType == T_EMPTY {
+				break
+			} else if projectile {
+				// we have a chance of hitting the cover blocks
+				if tile.tType == T_SLOWV || tile.tType == T_SLOWH || tile.tType == T_WLOWV || tile.tType == T_WLOWH {
+					// we have a chance to hit here, depending on how close we are to the cover
+					dist2 := float64(((sx - px) * (sx - px)) + ((sy - py) * (sy - py)))
+					chancepass := (CHANCE_M / dist2) + CHANCE_B
+					randval := rand.Float64()
+					if randval > chancepass {
+						break
+					}
 				}
 			}
 		}
