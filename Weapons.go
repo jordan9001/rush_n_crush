@@ -85,7 +85,7 @@ type PowerUp struct {
 }
 
 func (pu PowerUp) getId() int32 {
-	var id int32 = (int32(pu.pos.x) << 16) & int32(pu.pos.y)
+	var id int32 = (int32(pu.pos.x) << 16) | int32(pu.pos.y)
 	return id
 }
 

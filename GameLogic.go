@@ -147,8 +147,9 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		gv.ClientsInGame++
 		// see if we have a spawn for them
 		perm := rand.Perm(len(gv.Spawns))
-		for i, _ := range perm {
+		for _, i := range perm {
 			if gv.Spawns[i].client < 0 {
+				fmt.Printf("Client %d gets spawn %d\n", id, i)
 				gv.Spawns[i].client = id
 				break
 			}
@@ -395,11 +396,11 @@ func StartGame(startup_path string) (int, error) {
 	wallCache = wallCache.add(eztrump)
 	wallCache = wallCache.add(minecraft)
 	gv.puplevel0 = shotgunCache
-	gv.pup0refresh = -1
+	gv.pup0refresh = 9
 	gv.puplevel1 = rocketCache
-	gv.pup1refresh = -1
+	gv.pup1refresh = 9
 	gv.puplevel2 = wallCache
-	gv.pup2refresh = -1
+	gv.pup2refresh = 9
 
 	// Make our read chan
 	c := make(chan command)
