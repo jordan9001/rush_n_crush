@@ -76,24 +76,28 @@ function RushNCrush(url, canvas_id) {
 			if (that.focux < 0) {
 				that.focux = 0;
 			}
+			that.playerlock = false;
 			that.draw(true);
 		} else if (evt.keyCode == 39) {
 			that.focux += (1/that.zoom) * panspeed;
 			if (that.focux > that.mapw) {
 				that.focux = that.mapw;
 			}
+			that.playerlock = false;
 			that.draw(true);
 		} else if (evt.keyCode == 38) {
 			that.focuy -= (1/that.zoom) * panspeed;
 			if (that.focuy < 0) {
 				that.focuy = 0;
 			}
+			that.playerlock = false;
 			that.draw(true);
 		} else if (evt.keyCode == 40) {
 			that.focuy += (1/that.zoom) * panspeed;
 			if (that.focuy > that.maph) {
 				that.focuy = that.maph;
 			}
+			that.playerlock = false;
 			that.draw(true);
 		} else if (evt.keyCode == 32) {
 			that.next_player();

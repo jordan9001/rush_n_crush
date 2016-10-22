@@ -1,13 +1,13 @@
 Server Side:
 	Chat (with origin player? Could be fun)
 	Lobby
-	Handle disconnects
+	Handle disconnects better (if last player, etc)
 	Handle connections during game
 	Timeout turn
 	Flag
 	Balance Weapons
-	Encourage Exploring / More moves?
-	random angle is showing up as zero?
+	Change so all above T_FLAG are powerups, and you just assign groups, so you have have unlimited different groups
+	map editor
 
 Client Side:
 	pad the fullscreen down a bit
