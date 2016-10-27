@@ -54,7 +54,11 @@ func (wc WeaponCache) add(w Weapon) WeaponCache {
 	// check first if there is one already
 	for i := 0; i < len(wc); i++ {
 		if wc[i].name == w.name {
-			wc[i].ammo += w.ammo
+			if w.ammo == -1 || wc[i].ammo == -1 {
+				wc[i].ammo = -1
+			} else {
+				wc[i].ammo += w.ammo
+			}
 			return wc
 		}
 	}
@@ -122,9 +126,23 @@ func (h HitInfo) MarshalJSON() ([]byte, error) {
 func updatePowerups(gv *GameVariables) bool {
 	// check each powerup
 	for i := 0; i < len(gv.PowerUps); i++ {
-		if (gv.PowerUps[i].refresh == -1 && gv.PowerUps[i].lastRefresh < 0) || (gv.PowerUps[i].refresh > -1 && gv.PowerUps[i].refresh <= gv.turnNumber-gv.PowerUps[i].lastRefresh) {
-			gv.PowerUps[i].lastRefresh = gv.turnNumber
+		if gv.PowerUps[i].refresh == -1 {
+			if gv.PowerUps[i].lastRefresh <= 0 {
+				// One time powerups, add all in possible
+				if len(gv.PowerUps[i].weapons) == 0 {
+					gv.PowerUps[i].weapons = gv.PowerUps[i].possibleWeapons
+					fmt.Printf("Updated PowerUp at %d,%d\n", gv.PowerUps[i].pos.x, gv.PowerUps[i].pos.y)
+				}
+				gv.PowerUps[i].lastRefresh = 1
+			} else {
+				// Remove the powerup
+				gv.PowerUps = append(gv.PowerUps[:i], gv.PowerUps[i+1:]...)
+				i--
+			}
+		} else if gv.PowerUps[i].refresh <= (gv.turnNumber/gv.ClientsInGame)-gv.PowerUps[i].lastRefresh {
+			gv.PowerUps[i].lastRefresh = (gv.turnNumber / gv.ClientsInGame)
 			if len(gv.PowerUps[i].possibleWeapons) > 0 {
+				// add a random one from the possible
 				toadd := rand.Intn(len(gv.PowerUps[i].possibleWeapons))
 				gv.PowerUps[i].weapons = gv.PowerUps[i].possibleWeapons[toadd : toadd+1]
 				fmt.Printf("Updated PowerUp at %d,%d to have %q\n", gv.PowerUps[i].pos.x, gv.PowerUps[i].pos.y, gv.PowerUps[i].weapons[0].name)
@@ -151,7 +169,7 @@ func genericDamage(hx, hy, start_x, start_y, direction int16, multiplier float32
 		return false
 	}
 
-	fmt.Printf("Shot %d,%d with %s\n", hx, hy, w.name)
+	fmt.Printf("Shot from %d,%d to %d,%d with %s\n", start_x, start_y, hx, hy, w.name)
 
 	if gv.GameMap[hy][hx].occupied == true {
 		damagePlayer(hx, hy, int16(float32(w.playerDamageMult)*multiplier), u, gv)
@@ -269,7 +287,7 @@ func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup
 		[]float32{0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0},
 		[]float32{0.0, 0.0, 0.2, 0.2, 0.2, 0.0, 0.0},
 		[]float32{0.0, 0.2, 0.3, 0.4, 0.3, 0.2, 0.0},
-		[]float32{0.1, 0.2, 0.4, 0.0, 0.4, 0.2, 0.1},
+		[]float32{0.1, 0.2, 0.4, 1.0, 0.4, 0.2, 0.1},
 		[]float32{0.0, 0.2, 0.3, 0.4, 0.3, 0.2, 0.0},
 		[]float32{0.0, 0.0, 0.2, 0.2, 0.2, 0.0, 0.0},
 		[]float32{0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0},
@@ -279,21 +297,21 @@ func damageExplosion(start_x, start_y, direction int16, w Weapon, u *UpdateGroup
 		for j := 0; j < len(aoe); j++ {
 			if aoe[i][j] > 0 {
 				hx, hy := trace(ex, ey, ex+int16(i-(len(aoe[0])/2)), ey+int16(j-(len(aoe)/2)), true, false, gv)
-				hitareas = append(hitareas, hx)
-				hitareas = append(hitareas, hy)
-				hitareas = append(hitareas, int16(i))
-				hitareas = append(hitareas, int16(j))
-
-				//genericDamage(hx, hy, ex, ey, direction, aoe[i][j], w, u, gv)
+				if w.tileDamageMult < 0 {
+					hitareas = append(hitareas, hx)
+					hitareas = append(hitareas, hy)
+					hitareas = append(hitareas, int16(i))
+					hitareas = append(hitareas, int16(j))
+				} else {
+					genericDamage(hx, hy, ex, ey, direction, aoe[i][j], w, u, gv)
+				}
 			}
 		}
 	}
-	ret := genericDamage(ex, ey, start_x, start_y, direction, 1.0, w, u, gv)
-	if !ret {
-		return false
-	}
-	for i := 0; i < len(hitareas); i += 4 {
-		genericDamage(hitareas[i], hitareas[i+1], ex, ey, direction, aoe[hitareas[i+2]][hitareas[i+3]], w, u, gv)
+	if w.tileDamageMult < 0 {
+		for i := 0; i < len(hitareas); i += 4 {
+			genericDamage(hitareas[i], hitareas[i+1], ex, ey, direction, aoe[hitareas[i+2]][hitareas[i+3]], w, u, gv)
+		}
 	}
 	return true
 }
@@ -342,21 +360,21 @@ var shovel Weapon = Weapon{
 var bazooka Weapon = Weapon{
 	name:             "bazooka",
 	damage:           damageExplosion,
-	playerDamageMult: 70,
+	playerDamageMult: 60,
 	tileDamageMult:   100,
 	damageType:       "explosion",
 	ammo:             2,
 	movesCost:        9,
 	distance:         45,
-	randomAngle:      6,
+	randomAngle:      15,
 	shotsPerShot:     1,
 }
 
 var suicide Weapon = Weapon{
 	name:             "suicide",
 	damage:           damageExplosion,
-	playerDamageMult: 400,
-	tileDamageMult:   100,
+	playerDamageMult: 900,
+	tileDamageMult:   900,
 	damageType:       "explosion",
 	ammo:             1,
 	movesCost:        5,

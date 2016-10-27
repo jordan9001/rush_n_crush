@@ -258,6 +258,12 @@ RushNCrush.prototype.next_player = function() {
 RushNCrush.prototype.update_game = function(data) {
 	this.userid = data.your_id;
 	this.user_turn = data.current_turn;
+	// update page title
+	if (data.your_id == data.current_turn) {
+		document.title = "**YOUR TURN**";
+	} else {
+		document.title = "Rush n' Crush";
+	}
 	// update tiles
 	var u_t = data.updated_tiles;
 	for (var i=0; i<u_t.length; i++) {
@@ -397,7 +403,7 @@ RushNCrush.prototype.run_animations_oneatatime = function(callback) {
 }
 
 RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
-	var steps = 45;
+	var steps = 9;
 	var anistep = 1;
 	var that = this;
 	var topl = this.coord2px(hitx,hity);
@@ -412,8 +418,8 @@ RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
 			return false;
 		}
 		// block hit
-		var fade = 2.0 / anistep;
-		var pad = -0.5 + (w * (anistep / (steps * 3)));
+		var fade = 1.0 / anistep + 0.2;
+		var pad = -0.5;
 		that.ctx.fillStyle = "rgba(200,0,0,"+ fade +")";
 		that.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - (pad * 2), w - (pad * 2));
 		// shot trace
@@ -430,7 +436,7 @@ RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
 }
 
 RushNCrush.prototype.player_animate = function(p_index, sx,sy, x,y) {
-	var steps = 18;
+	var steps = 6;
 	var anistep = 1;
 	var that = this;
 	var update_player = function() {
@@ -626,9 +632,9 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	}
 
 	// draw debug index
-	//this.ctx.fillStyle = "#000000";
-	//this.ctx.font="8px";
-	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
+	this.ctx.fillStyle = "#000000";
+	this.ctx.font="8px";
+	this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
 
 RushNCrush.prototype.draw_powerup = function(powerup) {

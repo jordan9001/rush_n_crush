@@ -286,6 +286,9 @@ const (
 func trace(px, py, x, y int16, projectile bool, stopBeforeHit bool, gv *GameVariables) (int16, int16) {
 	// fmt.Printf("Trace from %d,%d to %d,%d: ", px, py, x, y)
 	var dx, dirx, dy, diry int16
+	if px == x && py == y {
+		return px, py
+	}
 	if x > px {
 		dx = x - px
 		dirx = 1

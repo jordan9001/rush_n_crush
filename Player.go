@@ -243,6 +243,7 @@ func fire(message string, client int, u *UpdateGroup, gv *GameVariables) error {
 						}
 						if !foundp {
 							// dude killed itself
+							fmt.Printf("Player %d killed itself?\n", pid)
 							return nil
 						}
 						if gv.GamePlayers[p].weapons[w].ammo > 0 {
@@ -258,19 +259,31 @@ func fire(message string, client int, u *UpdateGroup, gv *GameVariables) error {
 	return errors.New("Couldn't find the player/weapon combo")
 }
 
-func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) {
+func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) bool {
 	// find the player
 	for i := 0; i < len(gv.GamePlayers); i++ {
 		if gv.GamePlayers[i].pos.x == x && gv.GamePlayers[i].pos.y == y {
 			gv.GamePlayers[i].health -= damage
 			if gv.GamePlayers[i].health <= 0 {
+				// Drop players items as a powerup
+				new_powerup := PowerUp{
+					weapons:         gv.GamePlayers[i].weapons,
+					possibleWeapons: gv.GamePlayers[i].weapons,
+					pos:             Position{x: x, y: y},
+					refresh:         -1,
+					lastRefresh:     -1,
+				}
+				gv.PowerUps = append(gv.PowerUps, new_powerup)
+
 				// remove player
 				gv.GameMap[gv.GamePlayers[i].pos.y][gv.GamePlayers[i].pos.x].occupied = false
 				gv.GamePlayers = append(gv.GamePlayers[:i], gv.GamePlayers[i+1:]...)
-
+				return true
 			}
+			return false
 		}
 	}
+	return false
 }
 
 func makePlayerUpdates(client int, gv *GameVariables) (map[int8]Player, map[int32]PowerUp) {

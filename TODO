@@ -1,19 +1,21 @@
 Server Side:
-	Chat (with origin player? Could be fun)
-	Lobby
-	Handle disconnects better (if last player, etc)
-	Handle connections during game
-	Timeout turn
 	Flag
 	Balance Weapons
+	PlayerClasses
+	collapsing map
+	no camp
+	traps
+	lazer through
+	Handle disconnects better (if last player, etc)
+	Handle connections during game
 	Change so all above T_FLAG are powerups, and you just assign groups, so you have have unlimited different groups
-	map editor
+	Timeout turn
+	Chat (with origin player? Could be fun)
+	Lobby
 
 Client Side:
-	pad the fullscreen down a bit
-	focus on where you click. When you click on your guy, you select them. When you click on a weapon, you select it, and go into shooting mode. Click outside the map to cancel shooting.
-	
-	all the server stuff
-	click on weapons without shooting
+	Click to Move
 	crosshair
-	
+	map editor
+	all the server stuff
+

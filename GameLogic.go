@@ -386,7 +386,7 @@ func StartGame(startup_path string) (int, error) {
 	gv.PowerUps = make([]PowerUp, 0, 8)
 	// Make defaults
 	gv.currentPlayerCount = 0
-	gv.movesPerPlayer = 12
+	gv.movesPerPlayer = 16
 	gv.defaultPlayerHealth = 100
 	gv.playersPerClient = 3
 	gv.ClientsForGame = 2
@@ -407,9 +407,9 @@ func StartGame(startup_path string) (int, error) {
 	wallCache = wallCache.add(minecraft)
 	wallCache = wallCache.add(encase)
 	gv.puplevel0 = shotgunCache
-	gv.pup0refresh = 6
+	gv.pup0refresh = 3
 	gv.puplevel1 = rocketCache
-	gv.pup1refresh = 9
+	gv.pup1refresh = 5
 	gv.puplevel2 = wallCache
 	gv.pup2refresh = 7
 
