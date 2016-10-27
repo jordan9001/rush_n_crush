@@ -627,14 +627,14 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	}
 	// Draw shadow
 	if (!tile_obj.lit && this.ingame) {
-		this.ctx.fillStyle = "rgba(0,0,0,0.15)";
-		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+		this.ctx.fillStyle = "rgba(0,0,0,0.45)";
+		this.ctx.fillRect(topl[0], topl[1], w, w);
 	}
 
 	// draw debug index
-	this.ctx.fillStyle = "#000000";
-	this.ctx.font="8px";
-	this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
+	//this.ctx.fillStyle = "#000000";
+	//this.ctx.font="8px";
+	//this.ctx.fillText(""+x+","+y, topl[0] + 3, topl[1] + (w/2));
 };
 
 RushNCrush.prototype.draw_powerup = function(powerup) {

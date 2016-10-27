@@ -407,11 +407,11 @@ func StartGame(startup_path string) (int, error) {
 	wallCache = wallCache.add(minecraft)
 	wallCache = wallCache.add(encase)
 	gv.puplevel0 = shotgunCache
-	gv.pup0refresh = 3
+	gv.pup0refresh = 2
 	gv.puplevel1 = rocketCache
-	gv.pup1refresh = 5
+	gv.pup1refresh = 4
 	gv.puplevel2 = wallCache
-	gv.pup2refresh = 7
+	gv.pup2refresh = 6
 
 	// Make our read chan
 	c := make(chan command)

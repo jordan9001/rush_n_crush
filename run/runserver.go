@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	go http.ListenAndServe(":8080", http.FileServer(http.Dir("/var/www/site")))
+	go http.ListenAndServe(":8080", http.FileServer(http.Dir("./run/site")))
 	var startup_file string
 	if len(os.Args) > 1 {
 		startup_file = os.Args[1]
