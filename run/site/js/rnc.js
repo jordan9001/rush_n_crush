@@ -56,8 +56,7 @@ function RushNCrush(url, canvas_id) {
 		var rect = that.canvas.getBoundingClientRect();
 		var px = event.clientX - rect.left;
 		var py = event.clientY - rect.top;
-		coord = that.px2coord(px, py);
-		that.handle_point(coord[0], coord[1]);
+		that.handle_point(px, py);
 		
 	});
 	document.addEventListener('keydown', function(evt) {
@@ -146,14 +145,32 @@ RushNCrush.prototype.handle_scroll = function(px, py, scrolly) {
 		this.draw(true);
 }
 
-RushNCrush.prototype.handle_point = function(x, y) {
+RushNCrush.prototype.handle_point = function(px, py) {
+	coord = that.px2coord(px, py);
 	// aim, if it is your turn and you have a guy selected, and he has turns
 	if (this.user_turn != undefined && this.user_turn == this.userid && this.player_index >= 0) {
-		px = this.players[this.player_index].pos.x + 0.5;
-		py = this.players[this.player_index].pos.y + 0.5;
-		ang = 180 * Math.atan2(y - py, x - px) / Math.PI;
+		var plx = this.players[this.player_index].pos.x + 0.5;
+		var ply = this.players[this.player_index].pos.y + 0.5;
+		var ang = 180 * Math.atan2(coord[1] - ply, coord[0] - plx) / Math.PI;
 		this.players[this.player_index].dir = Math.floor(ang);
 		this.draw(false);
+	}
+	// change cursor based on things
+	var aimcursor = true;
+	for (var i=0; i<this.clickable.length; i++) {
+		if (px > this.clickable[i].x && py > this.clickable[i].y && px < this.clickable[i].x + this.clickable[i].w && py < this.clickable[i].y + this.clickable[i].h) {
+			aimcursor = false;
+			break;
+		}
+	}
+	if (aimcursor && (coord[0] < 0 || coord[1] < 0 || coord[0] > this.mapw || coord[1] > this.maph)) {
+		aimcursor = false;
+	}
+	
+	if (aimcursor && document.body.style.cursor != "crosshair") {
+		document.body.style.cursor = "crosshair";
+	} else if (!aimcursor && document.body.style.cursor != "default") {
+		document.body.style.cursor = "default";
 	}
 };
 
@@ -162,7 +179,6 @@ RushNCrush.prototype.handle_click = function(px, py) {
 	for (var i=0; i<this.clickable.length; i++) {
 		if (px > this.clickable[i].x && py > this.clickable[i].y && px < this.clickable[i].x + this.clickable[i].w && py < this.clickable[i].y + this.clickable[i].h) {
 			this.clickable[i].click();
-			console.log("Clicked");
 			return;
 		}
 	}
@@ -246,6 +262,19 @@ RushNCrush.prototype.next_player = function() {
 	for (var i=1; i<=this.players.length; i++) {
 		if (this.players[(this.player_index + i) % this.players.length].owner == this.userid) {
 			this.player_index = (this.player_index + i) % this.players.length;
+			this.focux = this.players[this.player_index].pos.x + 0.5;
+			this.focuy = this.players[this.player_index].pos.y + 0.5;
+			this.playerlock = true;
+			this.draw(false);
+			return;
+		}
+	}
+};
+
+RushNCrush.prototype.choose_player = function(id) {
+	for (var i=0; i<this.players.length; i++) {
+		if (this.players[i].id == id) {
+			this.player_index = i;
 			this.focux = this.players[this.player_index].pos.x + 0.5;
 			this.focuy = this.players[this.player_index].pos.y + 0.5;
 			this.playerlock = true;
@@ -491,6 +520,8 @@ RushNCrush.prototype.px2coord = function(px, py) {
 };
 
 RushNCrush.prototype.draw = function(cast) {
+	// clear clickable area
+	this.clickable = [];
 	// if the canvas size is wrong, set it
 	
 	if (cast && (this.ctx.canvas.width != window.innerWidth || this.ctx.canvas.height != window.innerHeight)) {
@@ -572,18 +603,26 @@ RushNCrush.prototype.draw_player = function(player) {
 	this.ctx.lineTo(center[0], center[1]);
 	this.ctx.fill();
 	this.ctx.stroke();
-	// draw health
 	if (player.owner == this.userid) {
+		// draw health
 		this.ctx.fillStyle = this.team_color[player.owner];
 		var bottoml = this.coord2px(player.pos.x, player.pos.y + 1);
 		var height = this.zoom / 15;
 		var width = this.zoom * (player.health / player.max_health);
 		this.ctx.fillRect(bottoml[0], bottoml[1] + height, width, height);
+
+		// add clickable area
+		var that = this;
+		var clickarea = {x:center[0] - (this.zoom/2), y:center[1] - (this.zoom/2), w:this.zoom, h:this.zoom, id:player.id, click: function() {
+			that.choose_player(this.id);
+		}, over: function() {}};
+		this.clickable.push(clickarea);
 	}
 }
 
 RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
-	no_draw = false;
+	var no_draw = false;
+	var circle = false;
 	switch (tile_obj.tType) {
 	case 1:
 		this.ctx.fillStyle = "#000000";
@@ -616,19 +655,41 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	case 8:
 		no_draw = true;
 		// Walkable tile
+		break;
+	case 9:
+		no_draw = true;
+		// Spawn
+		break;
+	case 10:
+		no_draw = true;
+		// Flag
+		break;
+	case 11:
+	case 12:
+	case 13:
+		no_draw = true;
+		circle = true;
+		this.ctx.strokeStyle = "#daa520";
+		// pup
+		break;
 	}
 	
 	var topl = this.coord2px(x,y);
 	var w = this.zoom;
-	var pad = -0.5;
+	var pad = -0.06;
 	// Draw tile
 	if (no_draw == false) {
-		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - pad, w - pad);
+		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - (2*pad), w - (2*pad));
+	}
+	if (circle == true) {
+		this.ctx.beginPath();
+		this.ctx.arc(topl[0]+(w/2), topl[1]+(w/2), w * 0.4, 0, 2*Math.PI);
+		this.ctx.stroke();
 	}
 	// Draw shadow
 	if (!tile_obj.lit && this.ingame) {
 		this.ctx.fillStyle = "rgba(0,0,0,0.45)";
-		this.ctx.fillRect(topl[0], topl[1], w, w);
+		this.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - (2*pad), w - (2*pad));
 	}
 
 	// draw debug index
@@ -640,7 +701,7 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 RushNCrush.prototype.draw_powerup = function(powerup) {
 	var x = powerup.pos.x;
 	var y = powerup.pos.y;
-	this.ctx.fillStyle = "#fff200";
+	this.ctx.fillStyle = "#daa520";
 	var rad = this.zoom * 0.4;
 	var center = this.coord2px(x + 0.5, y + 0.5);
 	this.ctx.beginPath();
@@ -656,8 +717,6 @@ RushNCrush.prototype.draw_powerup = function(powerup) {
 }
 
 RushNCrush.prototype.draw_ui = function() {
-	// clear clickable area
-	this.clickable = [];
 	// Draw current Turn
 	var box_size = 12;
 	var pad = 4;
@@ -718,8 +777,7 @@ RushNCrush.prototype.draw_ui = function() {
 		var that = this;
 		var clickarea = {x:x, y:y, w:w, h:box_size, index:i, click: function() {
 			that.choose_weapon(this.index);
-			console.log("Got clicked "+ this.index);
-		}, over: function(index) {}};
+		}, over: function() {}};
 		this.clickable.push(clickarea);
 	}
 }

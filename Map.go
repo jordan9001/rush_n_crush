@@ -59,11 +59,7 @@ func (t Tile) MarshalJSON() ([]byte, error) {
 	pos, _ := t.pos.MarshalJSON()
 	buf.Write(pos)
 	buf.WriteString(",\"tType\":")
-	if t.tType >= T_WALK {
-		buf.WriteString(strconv.FormatInt(int64(T_WALK), 10))
-	} else {
-		buf.WriteString(strconv.FormatInt(int64(t.tType), 10))
-	}
+	buf.WriteString(strconv.FormatInt(int64(t.tType), 10))
 	buf.WriteString(",\"health\":")
 	buf.WriteString(strconv.FormatInt(int64(t.health), 10))
 	buf.WriteString(",\"nextType\":")
