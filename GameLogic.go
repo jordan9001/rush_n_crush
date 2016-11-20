@@ -41,6 +41,7 @@ func (m Message) MarshalJSON() ([]byte, error) {
 
 type UpdateGroup struct {
 	YourId        int
+	GameStarted   bool
 	ClientTurn    int
 	TileUpdates   []Tile
 	PlayerUpdates map[int8]Player
@@ -52,6 +53,12 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 	var first bool
 	buf := bytes.NewBufferString("{\"your_id\":")
 	buf.WriteString(strconv.FormatInt(int64(u.YourId), 10))
+	buf.WriteString(",\"game_running\":")
+	if u.GameStarted {
+		buf.WriteString("true")
+	} else {
+		buf.WriteString("false")
+	}
 	buf.WriteString(",\"current_turn\":\"")
 	buf.WriteString(strconv.FormatInt(int64(u.ClientTurn), 10))
 	buf.WriteString("\",\"updated_tiles\":[")
@@ -100,17 +107,23 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 
 type GameVariables struct {
 	GameNumber          int
+	GameStarted         bool
 	GameMap             [][]Tile
 	Spawns              []Spawn
 	GamePlayers         []Player
+	RespawnPlayers      []Player
 	currentPlayerCount  int8
 	movesPerPlayer      int8
+	livesPerPlayer      int8 // more correctly, respawns per player. 0 is one life
 	defaultPlayerHealth int16
 	playersPerClient    int8
 	ClientsForGame      int
 	ClientsInGame       int
 	ClientTurn          int
 	turnNumber          int
+	respawnTime         int
+	Targets             []Target
+	defaultWeapons      WeaponCache
 	PowerUps            []PowerUp
 	puplevel0           WeaponCache
 	pup0refresh         int
@@ -139,6 +152,9 @@ func processCommand(id int, message string, gv *GameVariables) error {
 	// Run Commands
 	switch command {
 	case "get_gamestate": // no args
+		if gv.GameStarted {
+			return nil
+		}
 		// Register client, but just wait in lobby until the admin sends the start command
 		// From the lobby they can change map, change number of clients, change game type, etc
 		// TODO
@@ -159,6 +175,11 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		SendMap(id, gv)
 		// After sending, add in players for them
 		AddPlayers(id, gv)
+	case "start_game": // no args
+		// TODO all clients game have to send this
+		gv.GameStarted = true
+		BeginPlay(gv)
+
 	case "player_move": // args = player_id, newx, newy, dir
 		// moves player, and updates dir
 		err = MovePlayer(message[i+1:], id, &u, gv)
@@ -223,6 +244,30 @@ func processCommand(id int, message string, gv *GameVariables) error {
 			}
 		}
 		return nil
+	case "set_respawn_time": // arg = respawn_time
+		if id == -1 {
+			var desired int64
+			desired, err = strconv.ParseInt(message[i+1:], 10, 64)
+			if err != nil {
+				return err
+			}
+			if desired > 0 {
+				gv.respawnTime = int(desired)
+			}
+		}
+		return nil
+	case "set_player_lives": // arg = player_lives
+		if id == -1 {
+			var desired int64
+			desired, err = strconv.ParseInt(message[i+1:], 10, 64)
+			if err != nil {
+				return err
+			}
+			if desired > 0 {
+				gv.livesPerPlayer = int8(desired)
+			}
+		}
+		return nil
 	case "end_turn": // no arg
 		// Move to next Client
 		clearClientMoves(id, gv)
@@ -250,6 +295,7 @@ func updateClients(u UpdateGroup, gv *GameVariables) error {
 		// if the player has had everyone die, still show them whats happening
 		client_u = UpdateGroup{
 			YourId:      currentClient.Id,
+			GameStarted: gv.GameStarted,
 			ClientTurn:  gv.ClientTurn,
 			TileUpdates: u.TileUpdates,
 			WeaponHits:  u.WeaponHits,
@@ -257,7 +303,8 @@ func updateClients(u UpdateGroup, gv *GameVariables) error {
 		// if the player has had everyone die, still show them whats happening
 		if getNumberPlayers(i, gv) > 0 {
 			client_u.PlayerUpdates, client_u.PowerUpdates = makePlayerUpdates(currentClient.Id, gv)
-		} else if gv.turnNumber > 1 {
+		} else {
+			// spectators ?
 			client_u.PlayerUpdates, client_u.PowerUpdates = makePlayerUpdates(-1, gv)
 		}
 		// Send the data
@@ -273,7 +320,8 @@ func updateClients(u UpdateGroup, gv *GameVariables) error {
 
 func updateTurn(gv *GameVariables) {
 	changedTurn := false
-	if gv.ClientsInGame >= gv.ClientsForGame && len(gv.GamePlayers) > 0 {
+	respawnNow := false
+	if gv.GameStarted && gv.ClientsInGame >= gv.ClientsForGame && len(gv.GamePlayers) > 0 {
 		if gv.ClientTurn < 0 {
 			gv.ClientTurn = 0
 			changedTurn = true
@@ -307,14 +355,24 @@ func updateTurn(gv *GameVariables) {
 			changedTurn = true
 		}
 	}
+	if len(gv.GamePlayers) == 0 && len(gv.RespawnPlayers) > 0 {
+		// respawn now
+		respawnNow = true
+	}
 	if changedTurn {
 		gv.turnNumber = gv.turnNumber + 1
 		fmt.Printf("\tTurn : %d\n", gv.turnNumber)
+		// do respawns
+		respawn(respawnNow, gv)
 		// Give the next client moves
 		giveClientMoves(gv.ClientTurn, gv)
 		// add powerups
 		updatePowerups(gv)
 	}
+}
+
+func BeginPlay(gv *GameVariables) {
+	// do things that need to be done only on start
 }
 
 func sendWhosWho(id int, gv *GameVariables) {
@@ -385,15 +443,23 @@ func StartGame(startup_path string) (int, error) {
 	// make our powerups
 	gv.PowerUps = make([]PowerUp, 0, 8)
 	// Make defaults
+	gv.GameStarted = false
 	gv.currentPlayerCount = 0
-	gv.movesPerPlayer = 16
+	gv.movesPerPlayer = 14
 	gv.defaultPlayerHealth = 100
 	gv.playersPerClient = 3
 	gv.ClientsForGame = 2
+	gv.livesPerPlayer = 0
+	gv.respawnTime = 2
 	// set initial
 	gv.ClientsInGame = 0
 	gv.ClientTurn = -1
 	gv.turnNumber = 0
+
+	gv.defaultWeapons = make([]Weapon, 0, 2)
+	gv.defaultWeapons = gv.defaultWeapons.add(pistol)
+	gv.defaultWeapons = gv.defaultWeapons.add(shovel)
+	gv.defaultWeapons = gv.defaultWeapons.add(bazooka)
 
 	var shotgunCache WeaponCache = make([]Weapon, 0, 2)
 	shotgunCache = shotgunCache.add(shotgun)
@@ -418,6 +484,7 @@ func StartGame(startup_path string) (int, error) {
 	con_read[gv.GameNumber] = c
 	// Make our map of players
 	gv.GamePlayers = make([]Player, 0, int(gv.playersPerClient)*gv.ClientsForGame)
+	gv.RespawnPlayers = make([]Player, 0, int(gv.playersPerClient)*gv.ClientsForGame)
 	gv.Spawns = make([]Spawn, 0, gv.ClientsForGame)
 
 	// run default commands from file

@@ -14,6 +14,8 @@ type Player struct {
 	pos          Position
 	health       int16
 	maxHealth    int16
+	lives        int8 // -1 is infinite
+	respawn      int
 	moves        int8
 	direction    int16 // 0 is right, 180 or -180 are left, 90 is down
 	defaultMoves int8
@@ -32,6 +34,8 @@ func (p Player) MarshalJSON() ([]byte, error) {
 	buf.WriteString(strconv.FormatInt(int64(p.health), 10))
 	buf.WriteString(",\"max_health\":")
 	buf.WriteString(strconv.FormatInt(int64(p.maxHealth), 10))
+	buf.WriteString(",\"lives\":")
+	buf.WriteString(strconv.FormatInt(int64(p.lives), 10))
 	buf.WriteString(",\"moves\":")
 	buf.WriteString(strconv.FormatInt(int64(p.moves), 10))
 	buf.WriteString(",\"dir\":")
@@ -50,7 +54,37 @@ func (p Player) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func respawn(fastforward bool, gv *GameVariables) {
+	respawned := false
+	for {
+		for i := 0; i < len(gv.RespawnPlayers); i++ {
+			if gv.RespawnPlayers[i].respawn <= 0 {
+				respawned = true
+				SpawnPlayers(gv.RespawnPlayers[i].owner, gv.RespawnPlayers[i].id, gv.RespawnPlayers[i].maxHealth, gv.RespawnPlayers[i].defaultMoves, gv.RespawnPlayers[i].lives, gv)
+				// remove from respond list
+				gv.RespawnPlayers = append(gv.RespawnPlayers[:i], gv.RespawnPlayers[i+1:]...)
+				i--
+			} else {
+				gv.RespawnPlayers[i].respawn--
+			}
+		}
+
+		if !fastforward || respawned {
+			break
+		}
+	}
+}
+
 func AddPlayers(client int, gv *GameVariables) {
+	var id int8
+	for i := 0; i < int(gv.playersPerClient); i++ {
+		id = gv.currentPlayerCount
+		gv.currentPlayerCount++
+		SpawnPlayers(client, id, gv.defaultPlayerHealth, gv.movesPerPlayer, gv.livesPerPlayer, gv)
+	}
+}
+
+func SpawnPlayers(client int, id int8, health int16, moves int8, lives int8, gv *GameVariables) {
 	var spawnx int16 = -1
 	var spawny int16 = -1
 	for i := 0; i < len(gv.Spawns); i++ {
@@ -60,33 +94,31 @@ func AddPlayers(client int, gv *GameVariables) {
 			break
 		}
 	}
-	for i := 0; i < int(gv.playersPerClient); i++ {
-		var p Player
-		p.id = gv.currentPlayerCount
-		gv.currentPlayerCount++
-		p.owner = client
-		// if this client has a spawn, add there, otherwise add randomly
-		if spawnx >= 0 {
-			p.pos = getPositionClose(spawnx, spawny, gv)
-			fmt.Printf("Spawn %d,%d, close %d,%d\n", spawnx, spawny, p.pos.x, p.pos.y)
-		} else {
-			p.pos = getRandomPosition(gv)
-		}
-		p.moves = 0
-		p.health = gv.defaultPlayerHealth
-		p.maxHealth = p.health
-		p.defaultMoves = gv.movesPerPlayer
-		// add default weapon
-		p.weapons = make([]Weapon, 0, 3)
-		w := pistol.makeCopy()
-		p.weapons = p.weapons.add(w)
-		w = shovel.makeCopy()
-		p.weapons = p.weapons.add(w)
-		w = bazooka.makeCopy()
-		p.weapons = p.weapons.add(w)
-		gv.GamePlayers = append(gv.GamePlayers, p)
-		gv.GameMap[p.pos.y][p.pos.x].occupied = true
+	var p Player
+	p.id = id
+	fmt.Printf("Spawned player %d\n", id)
+	p.owner = client
+	// if this client has a spawn, add there, otherwise add randomly
+	if spawnx >= 0 {
+		p.pos = getPositionClose(spawnx, spawny, gv)
+		fmt.Printf("Spawn %d,%d, close %d,%d\n", spawnx, spawny, p.pos.x, p.pos.y)
+	} else {
+		p.pos = getRandomPosition(gv)
 	}
+	p.health = health
+	p.maxHealth = health
+	p.moves = 0
+	p.defaultMoves = moves
+	p.lives = lives
+	p.respawn = 0
+	// add default weapon
+	p.weapons = make([]Weapon, 0, len(gv.defaultWeapons))
+	for i := 0; i < len(gv.defaultWeapons); i++ {
+		w := gv.defaultWeapons[i].makeCopy()
+		p.weapons = p.weapons.add(w)
+	}
+	gv.GamePlayers = append(gv.GamePlayers, p)
+	gv.GameMap[p.pos.y][p.pos.x].occupied = true
 }
 
 func MovePlayer(arg_string string, id int, u *UpdateGroup, gv *GameVariables) error {
@@ -266,6 +298,7 @@ func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) bool {
 			gv.GamePlayers[i].health -= damage
 			if gv.GamePlayers[i].health <= 0 {
 				// Drop players items as a powerup
+				fmt.Printf("Client %d's player %d died\n", gv.GamePlayers[i].owner, gv.GamePlayers[i].id)
 				new_powerup := PowerUp{
 					weapons:         gv.GamePlayers[i].weapons,
 					possibleWeapons: gv.GamePlayers[i].weapons,
@@ -275,6 +308,14 @@ func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) bool {
 				}
 				gv.PowerUps = append(gv.PowerUps, new_powerup)
 
+				if gv.GamePlayers[i].lives > 0 || gv.GamePlayers[i].lives == -1 {
+					if gv.GamePlayers[i].lives > 0 {
+						gv.GamePlayers[i].lives--
+					}
+					// add to respawn group
+					gv.GamePlayers[i].respawn = gv.respawnTime
+					gv.RespawnPlayers = append(gv.RespawnPlayers, gv.GamePlayers[i])
+				}
 				// remove player
 				gv.GameMap[gv.GamePlayers[i].pos.y][gv.GamePlayers[i].pos.x].occupied = false
 				gv.GamePlayers = append(gv.GamePlayers[:i], gv.GamePlayers[i+1:]...)
@@ -293,6 +334,9 @@ func makePlayerUpdates(client int, gv *GameVariables) (map[int8]Player, map[int3
 	if client == -1 {
 		// powerups
 		for pu := 0; pu < len(gv.PowerUps); pu++ {
+			if len(gv.PowerUps[pu].weapons) == 0 {
+				continue
+			}
 			id := gv.PowerUps[pu].getId()
 			powerUpdates[id] = gv.PowerUps[pu]
 		}

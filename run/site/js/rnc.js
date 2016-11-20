@@ -13,6 +13,7 @@ function RushNCrush(url, canvas_id) {
 	this.playerlock = true;
 	this.player_index = -1;
 	this.zoom = 1;
+	this.gamerunning = false;
 
 	// users
 	this.userid = undefined;
@@ -234,8 +235,13 @@ RushNCrush.prototype.choose_weapon = function(wi) {
 
 RushNCrush.prototype.end_turn = function() {
 	this.ws.send("end_turn:");
-	console.log("sent end_turn")
+	console.log("sent end_turn");
 };
+
+RushNCrush.prototype.send_start = function() {
+	this.ws.send("start_game:");
+	console.log("sent game_start");
+}
 
 RushNCrush.prototype.move_player = function(dx, dy) {
 	if (this.animating) {
@@ -255,7 +261,7 @@ RushNCrush.prototype.move_player = function(dx, dy) {
 	}
 	// send the move
 	this.ws.send("player_move:"+ this.players[i].id +","+ (this.players[i].pos.x + dx) +","+ (this.players[i].pos.y + dy) +","+ (this.players[i].dir));
-	console.log("sent player_move")
+	console.log("sent player_move");
 };
 
 RushNCrush.prototype.next_player = function() {
@@ -287,6 +293,8 @@ RushNCrush.prototype.choose_player = function(id) {
 RushNCrush.prototype.update_game = function(data) {
 	this.userid = data.your_id;
 	this.user_turn = data.current_turn;
+	// update running
+	this.gamerunning = data.game_running;
 	// update page title
 	if (data.your_id == data.current_turn) {
 		document.title = "**YOUR TURN**";
@@ -672,6 +680,10 @@ RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 		this.ctx.strokeStyle = "#daa520";
 		// pup
 		break;
+	case 14:
+		no_draw = true;
+		// target spawn
+		break;
 	}
 	
 	var topl = this.coord2px(x,y);
@@ -717,7 +729,6 @@ RushNCrush.prototype.draw_powerup = function(powerup) {
 }
 
 RushNCrush.prototype.draw_ui = function() {
-	// Draw current Turn
 	var box_size = 12;
 	var pad = 4;
 
@@ -726,11 +737,11 @@ RushNCrush.prototype.draw_ui = function() {
 	this.ctx.strokeStyle = "#000";
 	this.ctx.lineWidth = 1;
 
-	var player_moves = 0;
+	var player_moves = 1;
 	if (this.userid == this.user_turn && this.player_index >= 0) {
 		player_moves = this.players[this.player_index].moves;
 	}
-	for (var i=0; i<=player_moves; i++) {
+	for (var i=0; i<player_moves; i++) {
 		var x = pad;
 		var y = (i * (pad + box_size)) + pad;
 		this.ctx.fillRect(x,y, box_size,box_size);
@@ -777,6 +788,27 @@ RushNCrush.prototype.draw_ui = function() {
 		var that = this;
 		var clickarea = {x:x, y:y, w:w, h:box_size, index:i, click: function() {
 			that.choose_weapon(this.index);
+		}, over: function() {}};
+		this.clickable.push(clickarea);
+	}
+
+	// start game
+	if (!this.gamerunning) {
+		var w = this.canvas.width / 4;
+		var h = this.canvas.height / 6;
+		var text = "START GAME";
+		this.ctx.font = "24px Verdana";
+		var tw = this.ctx.measureText(text).width;
+		var th = this.ctx.measureText("M").width;
+		this.ctx.fillStyle = "rgba(255,255,255,0.96)";
+		this.ctx.strokeStyle = "#000";
+		this.ctx.fillRect((this.canvas.width / 2) - (w/2), (this.canvas.height * 0.6) - (h/2), w, h);
+		this.ctx.strokeRect((this.canvas.width / 2) - (w/2), (this.canvas.height * 0.6) - (h/2), w, h);
+		this.ctx.fillStyle = "#000";
+		this.ctx.fillText(text, (this.canvas.width / 2) - (tw/2), (this.canvas.height * 0.6) + (th/2));
+		var that = this;
+		var clickarea = {x:(this.canvas.width / 2) - (w/2), y:(this.canvas.height * 0.6) - (h/2), w:w, h:h, click: function() {
+			that.send_start();
 		}, over: function() {}};
 		this.clickable.push(clickarea);
 	}

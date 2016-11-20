@@ -24,6 +24,7 @@ const (
 	T_PUP0  int8 = 11
 	T_PUP1  int8 = 12
 	T_PUP2  int8 = 13
+	T_TARG  int8 = 14
 )
 const (
 	T_SWALL_H int16 = 100
@@ -64,6 +65,25 @@ func (t Tile) MarshalJSON() ([]byte, error) {
 	buf.WriteString(strconv.FormatInt(int64(t.health), 10))
 	buf.WriteString(",\"nextType\":")
 	buf.WriteString(strconv.FormatInt(int64(t.nextType), 10))
+	buf.WriteString("}")
+	return buf.Bytes(), nil
+}
+
+type Target struct {
+	pos    Position
+	owner  int
+	health int16
+	shotBy int
+}
+
+func (t Target) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBufferString("{\"pos\":")
+	pos, _ := t.pos.MarshalJSON()
+	buf.Write(pos)
+	buf.WriteString(",\"owner\":")
+	buf.WriteString(strconv.FormatInt(int64(t.owner), 10))
+	buf.WriteString(",\"health\":")
+	buf.WriteString(strconv.FormatInt(int64(t.health), 10))
 	buf.WriteString("}")
 	return buf.Bytes(), nil
 }
@@ -243,6 +263,8 @@ func LoadMap(map_args string, gv *GameVariables) error {
 					lastRefresh:     -1,
 				}
 				gv.PowerUps = append(gv.PowerUps, new_powerup)
+			} else if tile.tType == T_TARG {
+				// add a target
 			}
 			tile.occupied = false
 			row[j] = tile

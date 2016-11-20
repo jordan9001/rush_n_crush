@@ -1,11 +1,12 @@
 Server Side:
+	Targets to attack / defend
+	End game / score
 	Flag
+	Remove Spectators, they can be used to cheat
 	Balance Weapons
 	PlayerClasses
 	collapsing map
-	no camp
 	traps
-	lazer through
 	Handle disconnects better (if last player, etc)
 	Handle connections during game
 	Change so all above T_FLAG are powerups, and you just assign groups, so you have have unlimited different groups
@@ -15,7 +16,6 @@ Server Side:
 
 Client Side:
 	Click to Move
-	crosshair
 	map editor
 	all the server stuff
 

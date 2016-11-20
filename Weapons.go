@@ -363,7 +363,7 @@ var bazooka Weapon = Weapon{
 	playerDamageMult: 60,
 	tileDamageMult:   100,
 	damageType:       "explosion",
-	ammo:             2,
+	ammo:             1,
 	movesCost:        9,
 	distance:         45,
 	randomAngle:      15,
