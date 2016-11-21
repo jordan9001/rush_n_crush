@@ -319,9 +319,25 @@ func damagePlayer(x, y, damage int16, u *UpdateGroup, gv *GameVariables) bool {
 				// remove player
 				gv.GameMap[gv.GamePlayers[i].pos.y][gv.GamePlayers[i].pos.x].occupied = false
 				gv.GamePlayers = append(gv.GamePlayers[:i], gv.GamePlayers[i+1:]...)
-				return true
 			}
-			return false
+			// TODO, add to score
+			return true
+		}
+	}
+
+	// check the targets
+	for i := 0; i < len(gv.Targets); i++ {
+		if gv.Targets[i].pos.x == x && gv.Targets[i].pos.y == y {
+			// drop the target health
+			gv.Targets[i].health -= damage
+			if gv.Targets[i].health <= 0 {
+				// clear the target
+				gv.GameMap[gv.Targets[i].pos.y][gv.Targets[i].pos.x].occupied = false
+			}
+			// TODO add to the users score?
+			// update targets
+			u.TargetUpdates = append(u.TargetUpdates, gv.Targets[i])
+			return true
 		}
 	}
 	return false

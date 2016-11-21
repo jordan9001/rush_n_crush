@@ -73,7 +73,6 @@ type Target struct {
 	pos    Position
 	owner  int
 	health int16
-	shotBy int
 }
 
 func (t Target) MarshalJSON() ([]byte, error) {
@@ -160,6 +159,33 @@ func getRandomPosition(gv *GameVariables) Position {
 	return Position{x: -1, y: -1}
 }
 
+func assignTargets(u *UpdateGroup, gv *GameVariables) {
+	if len(gv.Spawns) == 0 {
+		// wut do?
+		// TODO
+		return
+	}
+	var closestspawnowner int
+	var closestspawndist, dy, dx, dist int16
+	// Game is started, so assign targets based on closest spawn that is taken
+	for t := 0; t < len(gv.Targets); t++ {
+		closestspawnowner = -1
+		closestspawndist = -1
+		for s := 0; s < len(gv.Spawns); s++ {
+			dy = gv.Spawns[s].pos.y - gv.Targets[t].pos.y
+			dx = gv.Spawns[s].pos.x - gv.Targets[t].pos.x
+			dist = (dx * dx) + (dy * dy)
+			if closestspawndist == -1 || closestspawndist > dist {
+				closestspawndist = dist
+				closestspawnowner = gv.Spawns[s].client
+			}
+		}
+		gv.Targets[t].owner = closestspawnowner
+		// update updates
+	}
+	u.TargetUpdates = append(u.TargetUpdates, gv.Targets...)
+}
+
 func damageTile(x, y, damage int16, u *UpdateGroup, gv *GameVariables) {
 	if gv.GameMap[y][x].nextType != gv.GameMap[y][x].tType {
 		gv.GameMap[y][x].health -= damage
@@ -210,6 +236,7 @@ func LoadMap(map_args string, gv *GameVariables) error {
 	for i := int16(0); i < h; i++ {
 		row := make([]Tile, w)
 		for j := int16(0); j < w; j++ {
+			occ := false
 			t, err = strconv.ParseInt(maparr[(i*w)+j+2], 10, 8)
 			if err != nil {
 				fmt.Printf("Got err %q\n", err)
@@ -265,8 +292,15 @@ func LoadMap(map_args string, gv *GameVariables) error {
 				gv.PowerUps = append(gv.PowerUps, new_powerup)
 			} else if tile.tType == T_TARG {
 				// add a target
+				target := Target{
+					pos:    Position{x: j, y: i},
+					owner:  -1,
+					health: 1,
+				}
+				gv.Targets = append(gv.Targets, target)
+				occ = true
 			}
-			tile.occupied = false
+			tile.occupied = occ
 			row[j] = tile
 		}
 		gv.GameMap[i] = row
@@ -402,6 +436,8 @@ func printAsciiMap(gm [][]Tile) {
 				fmt.Printf("$")
 			} else if gm[y][x].tType == T_PUP2 {
 				fmt.Printf("$")
+			} else if gm[y][x].tType == T_TARG {
+				fmt.Printf("@")
 			}
 		}
 		fmt.Printf("\n")

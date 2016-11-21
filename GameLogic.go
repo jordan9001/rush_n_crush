@@ -44,6 +44,7 @@ type UpdateGroup struct {
 	GameStarted   bool
 	ClientTurn    int
 	TileUpdates   []Tile
+	TargetUpdates []Target
 	PlayerUpdates map[int8]Player
 	PowerUpdates  map[int32]PowerUp // mapped by ((pos.x << 16) & (pos.y))
 	WeaponHits    []HitInfo
@@ -69,6 +70,16 @@ func (u UpdateGroup) MarshalJSON() ([]byte, error) {
 		}
 		tileJSON, _ := v.MarshalJSON()
 		buf.Write(tileJSON)
+		first = false
+	}
+	buf.WriteString("],\"updated_targets\":[")
+	first = true
+	for _, v := range u.TargetUpdates {
+		if !first {
+			buf.WriteString(",")
+		}
+		targetJSON, _ := v.MarshalJSON()
+		buf.Write(targetJSON)
 		first = false
 	}
 	buf.WriteString("],\"updated_players\":[")
@@ -140,6 +151,7 @@ func processCommand(id int, message string, gv *GameVariables) error {
 	var u UpdateGroup
 	u.TileUpdates = make([]Tile, 0, 16)
 	u.WeaponHits = make([]HitInfo, 0, 1)
+	u.TargetUpdates = make([]Target, 0, 1)
 
 	i := strings.Index(message, ":")
 	if i < 0 {
@@ -177,8 +189,10 @@ func processCommand(id int, message string, gv *GameVariables) error {
 		AddPlayers(id, gv)
 	case "start_game": // no args
 		// TODO all clients game have to send this
-		gv.GameStarted = true
-		BeginPlay(gv)
+		if gv.ClientsInGame >= gv.ClientsForGame {
+			gv.GameStarted = true
+			BeginPlay(&u, gv)
+		}
 
 	case "player_move": // args = player_id, newx, newy, dir
 		// moves player, and updates dir
@@ -292,13 +306,13 @@ func updateClients(u UpdateGroup, gv *GameVariables) error {
 		if currentClient.GameNumber != gv.GameNumber {
 			continue
 		}
-		// if the player has had everyone die, still show them whats happening
 		client_u = UpdateGroup{
-			YourId:      currentClient.Id,
-			GameStarted: gv.GameStarted,
-			ClientTurn:  gv.ClientTurn,
-			TileUpdates: u.TileUpdates,
-			WeaponHits:  u.WeaponHits,
+			YourId:        currentClient.Id,
+			GameStarted:   gv.GameStarted,
+			ClientTurn:    gv.ClientTurn,
+			TileUpdates:   u.TileUpdates,
+			TargetUpdates: u.TargetUpdates,
+			WeaponHits:    u.WeaponHits,
 		}
 		// if the player has had everyone die, still show them whats happening
 		if getNumberPlayers(i, gv) > 0 {
@@ -371,8 +385,9 @@ func updateTurn(gv *GameVariables) {
 	}
 }
 
-func BeginPlay(gv *GameVariables) {
+func BeginPlay(u *UpdateGroup, gv *GameVariables) {
 	// do things that need to be done only on start
+	assignTargets(u, gv)
 }
 
 func sendWhosWho(id int, gv *GameVariables) {

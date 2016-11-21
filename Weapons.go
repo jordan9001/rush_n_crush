@@ -435,6 +435,18 @@ var minecraft Weapon = Weapon{
 	shotsPerShot:     1,
 }
 
+var healthpack Weapon = Weapon{
+	name:             "healthpack",
+	damage:           damageMelee,
+	playerDamageMult: -30,
+	damageType:       "heal",
+	ammo:             1,
+	movesCost:        3,
+	distance:         0,
+	randomAngle:      0,
+	shotsPerShot:     0,
+}
+
 var flag Weapon = Weapon{
 	name:             "flag",
 	damage:           damageMelee,

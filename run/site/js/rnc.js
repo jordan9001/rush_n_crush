@@ -25,6 +25,7 @@ function RushNCrush(url, canvas_id) {
 	this.players = [];
 	this.team_color = ["#03c", "#c00", "#60c", "#093", "#0cc", "#fc0"]; // 6 starter color, we will randomly add more as needed (only multiples of 3)
 	this.powerups = [];
+	this.targets = [];
 
 	this.animating = false;
 	this.player_ani_queue = [];
@@ -290,6 +291,28 @@ RushNCrush.prototype.choose_player = function(id) {
 	}
 };
 
+RushNCrush.prototype.get_client_color = function(clientid) {
+	var color = this.team_color[clientid];
+	if (color == undefined) {
+		// add a random color
+		for (var i=0; i<99; i++) {
+			color = "#" + (Math.floor(Math.random()*5)*3).toString(16) + (Math.floor(Math.random()*5)*3).toString(16) + (Math.floor(Math.random()*5)*3).toString(16);
+			repeat = false;
+			for (var j=0; j<this.team_color.length; j++) {
+				if (color == this.team_color[j]) {
+					repeat = true;
+					break;
+				}
+			}
+			if (!repeat) {
+				break;
+			}
+		}
+		this.team_color[clientid] = color;
+	}
+	return color;
+};
+
 RushNCrush.prototype.update_game = function(data) {
 	this.userid = data.your_id;
 	this.user_turn = data.current_turn;
@@ -305,6 +328,20 @@ RushNCrush.prototype.update_game = function(data) {
 	var u_t = data.updated_tiles;
 	for (var i=0; i<u_t.length; i++) {
 		this.map[u_t[i].pos.y][u_t[i].pos.x] = u_t[i];
+	}
+	// update targets
+	var u_r = data.updated_targets;
+	for (var i=0; i<u_r.length; i++) {
+		var found = false;
+		for (var j=0; j<this.targets.length; j++) {
+			if (this.targets[j].pos.x == u_r[i].pos.x && this.targets[j].pos.y == u_r[i].pos.y) {
+				found = true;
+				this.targets[j] = u_r[i];
+			}
+		}
+		if (!found) {
+			this.targets.push(u_r[i]);
+		}
 	}
 	// update players
 	var u_p = data.updated_players;
@@ -566,6 +603,11 @@ RushNCrush.prototype.draw = function(cast) {
 		this.draw_player(this.players[i]);
 	}
 
+	// Draw the targets
+	for (var i=0; i<this.targets.length; i++) {
+		this.draw_target(this.targets[i]);
+	}
+
 	// Draw the UI
 	this.draw_ui();
 };
@@ -575,25 +617,8 @@ RushNCrush.prototype.draw_player = function(player) {
 		return;
 	}
 	var center = this.coord2px(player.pos.x + 0.5, player.pos.y + 0.5);
-	if (this.team_color[player.owner] == undefined) {
-		// add a random color
-		color = "";
-		for (var i=0; i<99; i++) {
-			color = "#" + (Math.floor(Math.random()*5)*3).toString(16) + (Math.floor(Math.random()*5)*3).toString(16) + (Math.floor(Math.random()*5)*3).toString(16);
-			repeat = false;
-			for (var j=0; j<this.team_color.length; j++) {
-				if (color == this.team_color[j]) {
-					repeat = true;
-					break;
-				}
-			}
-			if (!repeat) {
-				break;
-			}
-		}
-		this.team_color[player.owner] = color;
-	}
-	this.ctx.fillStyle = this.team_color[player.owner];
+	var teamcolor = this.get_client_color(player.owner);
+	this.ctx.fillStyle = teamcolor;
 	this.ctx.strokeStyle = "#000000";
 	this.ctx.beginPath();
 	this.ctx.arc(center[0], center[1], this.zoom/2 - 0.5, 0, 2*Math.PI);
@@ -613,7 +638,7 @@ RushNCrush.prototype.draw_player = function(player) {
 	this.ctx.stroke();
 	if (player.owner == this.userid) {
 		// draw health
-		this.ctx.fillStyle = this.team_color[player.owner];
+		this.ctx.fillStyle = teamcolor;
 		var bottoml = this.coord2px(player.pos.x, player.pos.y + 1);
 		var height = this.zoom / 15;
 		var width = this.zoom * (player.health / player.max_health);
@@ -626,7 +651,7 @@ RushNCrush.prototype.draw_player = function(player) {
 		}, over: function() {}};
 		this.clickable.push(clickarea);
 	}
-}
+};
 
 RushNCrush.prototype.draw_tile = function(tile_obj, x, y) {
 	var no_draw = false;
@@ -726,7 +751,26 @@ RushNCrush.prototype.draw_powerup = function(powerup) {
 		this.ctx.lineTo(center[0] - dx, center[1] - dy);
 	}
 	this.ctx.fill();
-}
+};
+
+RushNCrush.prototype.draw_target = function(target) {
+	if (target.health <= 0) {
+		return;
+	}
+	var center = this.coord2px(target.pos.x + 0.5, target.pos.y + 0.5);
+	var teamcolor = this.get_client_color(target.owner);
+	this.ctx.strokeStyle = teamcolor;
+	this.ctx.fillStyle = teamcolor;
+
+	this.ctx.beginPath();
+	this.ctx.lineWidth = this.zoom/6;
+	this.ctx.arc(center[0], center[1], (this.zoom/2) - (this.ctx.lineWidth / 2), 0, 2*Math.PI);
+	this.ctx.stroke();
+
+	this.ctx.beginPath();
+	this.ctx.arc(center[0], center[1], this.zoom/6, 0, 2*Math.PI);
+	this.ctx.fill();
+};
 
 RushNCrush.prototype.draw_ui = function() {
 	var box_size = 12;
@@ -812,7 +856,7 @@ RushNCrush.prototype.draw_ui = function() {
 		}, over: function() {}};
 		this.clickable.push(clickarea);
 	}
-}
+};
 
 RushNCrush.prototype.ray_cast_clear = function() {
 	// clear all the tiles
@@ -821,7 +865,7 @@ RushNCrush.prototype.ray_cast_clear = function() {
 			this.map[y][x].lit = false;
 		}
 	}
-}
+};
 
 RushNCrush.prototype.ray_cast_start = function(origin_x, origin_y) {
 	num_cast = 256;
@@ -867,6 +911,6 @@ RushNCrush.prototype.ray_cast = function(px, py, ex, ey) {
 		}
 	}
 
-}
+};
 
 var game = new RushNCrush("ws://"+ document.domain +":12345/", "gamecanvas");
