@@ -543,32 +543,11 @@ RushNCrush.prototype.build_map = function(maparr) {
 	return true;
 };
 
-RushNCrush.prototype.run_animations = function(callback) {
-	that = this;
-	this.animating = true;
-	var animate = function(dt) {
-		that.draw(false);
-		if (that.player_ani_queue.length == 0) {
-			that.animating = false;
-			callback();
-			return;
-		}else {
-			for (var i=0; i<that.player_ani_queue.length; i++) {
-				if (that.player_ani_queue[i]() == false) {
-					that.player_ani_queue.splice(i,1);
-					i--;
-				}
-			}
-		}
-		window.requestAnimationFrame(animate);
-	}
-	animate();
-}
-
 RushNCrush.prototype.run_animations_oneatatime = function(callback) {
-	that = this;
+	var that = this;
 	this.animating = true;
-	var animate = function(dt) {
+	var start_time = performance.now();
+	var animate = function(current_time) {
 		that.draw(false);
 		if (that.player_ani_queue.length == 0) {
 			that.animating = false;
@@ -580,7 +559,8 @@ RushNCrush.prototype.run_animations_oneatatime = function(callback) {
 			that.player_ani_queue.shift(1);
 		} else {
 			for (var i=0; i<ani_group.length; i++) {
-				if (ani_group[i]() == false) {
+				var dt = current_time - start_time;
+				if (ani_group[i](current_time - start_time) == false) {
 					ani_group.splice(i,1);
 					i--;
 				}
@@ -588,12 +568,11 @@ RushNCrush.prototype.run_animations_oneatatime = function(callback) {
 		}
 		window.requestAnimationFrame(animate);
 	}
-	animate();
+	animate(performance.now());
 }
 
 RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
-	var steps = 9;
-	var anistep = 1;
+	var millitime = 250;
 	var that = this;
 	var topl = this.coord2px(hitx,hity);
 	var tx1 = topl[0] + (this.zoom/2);
@@ -602,12 +581,14 @@ RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
 	var tx2 = from_topl[0] + (this.zoom/2);
 	var ty2 = from_topl[1] + (this.zoom/2);
 	var w = this.zoom;
-	var draw_hit = function() {
-		if (anistep >= steps) {
+	var draw_hit = function(milliseconds) {
+		if (millitime <= milliseconds) {
+			// set the final state
+			// do nothing
 			return false;
 		}
 		// block hit
-		var fade = 1.0 / anistep + 0.2;
+		var fade = 1.0 / (9 * milliseconds / millitime) + 0.2;
 		var pad = -0.5;
 		that.ctx.fillStyle = "rgba(200,0,0,"+ fade +")";
 		that.ctx.fillRect(topl[0] + pad, topl[1] + pad, w - (pad * 2), w - (pad * 2));
@@ -618,7 +599,6 @@ RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
 		that.ctx.moveTo(tx1, ty1);
 		that.ctx.lineTo(tx2, ty2);
 		that.ctx.stroke();
-		anistep++;
 		return true;
 	}
 	if (this.player_ani_queue.length === 0) {
@@ -628,17 +608,20 @@ RushNCrush.prototype.hit_animate = function(hitx,hity, fromx,fromy, type) {
 }
 
 RushNCrush.prototype.player_animate = function(p_index, sx,sy, x,y) {
-	var steps = 6;
-	var anistep = 1;
+	var millitime = 100;
 	var that = this;
-	var update_player = function() {
+	var update_player = function(milliseconds) {
 		if (that.players[p_index] === undefined) {
-			console.log("Lost one during animation")
-			return false
+			console.log("Lost one during animation");
+			return false;
+		}
+		if (millitime <= milliseconds) {
+			// set the final state
+			milliseconds = millitime;
 		}
 		// change player location and dir
-		dx = (x - sx) * (anistep / steps);
-		dy = (y - sy) * (anistep / steps);
+		dx = (x - sx) * (milliseconds / millitime);
+		dy = (y - sy) * (milliseconds / millitime);
 		that.players[p_index].pos.x = sx + dx;
 		that.players[p_index].pos.y = sy + dy;
 
@@ -647,13 +630,11 @@ RushNCrush.prototype.player_animate = function(p_index, sx,sy, x,y) {
 			that.focux = sx + dx + 0.5;
 			that.focuy = sy + dy + 0.5;
 		}
-		anistep = anistep + 1;
 
-		if (anistep > steps) {
-			anistep = 0;
-			return false
+		if (millitime <= milliseconds) {
+			return false;
 		} else {
-			return true
+			return true;
 		}
 	}
 	// put this function into the queue

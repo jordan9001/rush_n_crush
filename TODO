@@ -15,7 +15,8 @@ Server Side:
 	Lobby
 
 Client Side:
-	Click to Move
+	number of moves
+	Animations based on dt
 	map editor
 	all the server stuff
 
